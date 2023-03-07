@@ -18,7 +18,7 @@ INSTANTIATE_TEST_SUITE_P(
     TestSuite0Instantiation,
     TestSuite0,
     testing::Values(
-        "a*+",
+        "a*^",
         ".*$"
     )
 );
@@ -42,11 +42,13 @@ INSTANTIATE_TEST_SUITE_P(
     TestSuite1Instantiation,
     TestSuite1,
     testing::Values(
-        TestParam{.input = "aa",  .pattern = "aa"   },
-        TestParam{.input = "aa",  .pattern = "a*"   },
-        TestParam{.input = "aa",  .pattern = ".*"   },
-        TestParam{.input = "ab",  .pattern = "a*b*" },
-        TestParam{.input = "abc", .pattern = "a.c*" }
+        TestParam{.input = "aa",      .pattern = "aa"           },
+        TestParam{.input = "aa",      .pattern = "a*"           },
+        TestParam{.input = "aa",      .pattern = ".*"           },
+        TestParam{.input = "ab",      .pattern = "a*b*"         },
+        TestParam{.input = "abc",     .pattern = "a.c*"         },
+        TestParam{.input = "aabc",    .pattern = "a*a+b+c*"     },
+        TestParam{.input = "aabcdef", .pattern = "a*a+b+c*.*.+" }
     )
 );
 /* clang-format on */
@@ -64,11 +66,13 @@ INSTANTIATE_TEST_SUITE_P(
     TestSuite2Instantiation,
     TestSuite2,
     testing::Values(
-        TestParam{.input = "aa",  .pattern = "a"    },
-        TestParam{.input = "aa",  .pattern = "b*a"  },
-        TestParam{.input = "aa",  .pattern = ".*ac" },
-        TestParam{.input = "ab",  .pattern = ".c"   },
-        TestParam{.input = "abc", .pattern = "..a"  }
+        TestParam{.input = "aa",  .pattern = "a"        },
+        TestParam{.input = "aa",  .pattern = "b*a"      },
+        TestParam{.input = "aa",  .pattern = ".*ac"     },
+        TestParam{.input = "ab",  .pattern = ".c"       },
+        TestParam{.input = "abc", .pattern = "..a"      },
+        TestParam{.input = "yxz", .pattern = ".+.+.+.+" },
+        TestParam{.input = "yxz", .pattern = "y+x+z.+"  }
     )
 );
 /* clang-format on */
