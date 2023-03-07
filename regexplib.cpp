@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <variant>
@@ -16,6 +17,10 @@ struct matcher_strict_char {
 
 struct matcher_strict_any {};
 
+struct matcher_strict_one_of {
+  std::vector<char> cs;
+};
+
 struct matcher_zero_more_char {
   char c;
 };
@@ -27,6 +32,7 @@ using matcher_t = std::variant<
   matcher_strict,
   matcher_strict_char,
   matcher_strict_any,
+  matcher_strict_one_of,
   matcher_zero_more_char,
   matcher_zero_more_any
 >;
@@ -37,7 +43,8 @@ using matcher_table_t = std::vector<matcher_t>;
 static constexpr auto is_strict_matcher = [](matcher_t const &m) {
   return std::holds_alternative<matcher_strict>(m) ||
          std::holds_alternative<matcher_strict_char>(m) ||
-         std::holds_alternative<matcher_strict_any>(m);
+         std::holds_alternative<matcher_strict_any>(m) ||
+         std::holds_alternative<matcher_strict_one_of>(m);
 };
 
 matcher_table_t convert_to_table(std::string_view p) {
@@ -56,9 +63,25 @@ matcher_table_t convert_to_table(std::string_view p) {
     return std::holds_alternative<matcher_zero_more_any>(m);
   };
 
+  bool one_of = false;
   int f = 0, i = 0;
   for (; i < p.size(); ++i) {
     switch (p[i]) {
+    case '[':
+      if (one_of)
+        throw std::invalid_argument("unexpected '[' inside [] expression");
+      if (f < i)
+        table.push_back(matcher_strict{f, i});
+      f = i + 1;
+      one_of = true;
+      break;
+    case ']':
+      if (f == i)
+        throw std::invalid_argument("impossible empty [] expression");
+      table.push_back(matcher_strict_one_of{{p.cbegin() + f, p.cbegin() + i}});
+      one_of = false;
+      f = i + 1;
+      break;
     case '*':
     case '+':
       if (f < i - 1)
@@ -87,6 +110,9 @@ matcher_table_t convert_to_table(std::string_view p) {
     }
   }
 
+  if (one_of)
+    throw std::invalid_argument("not terminated [] expression");
+
   if (f < i)
     table.push_back(matcher_strict{f, i});
 
@@ -111,6 +137,13 @@ bool does_match(std::string_view s, int f, int l, std::string_view p,
                 } else if constexpr (std::is_same_v<std::decay_t<decltype(m)>,
                                                     matcher_strict_any>) {
                   return does_match(s, f + 1, l, p, tb, tbi + 1);
+                } else if constexpr (std::is_same_v<std::decay_t<decltype(m)>,
+                                                    matcher_strict_one_of>) {
+                  for (auto c : m.cs) {
+                    if (c == s[f] && does_match(s, f + 1, l, p, tb, tbi + 1))
+                      return true;
+                  }
+                  return false;
                 } else if (does_match(s, f, l, p, tb, tbi + 1)) {
                   return true;
                 } else if constexpr (std::is_same_v<std::decay_t<decltype(m)>,
