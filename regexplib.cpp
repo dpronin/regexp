@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <variant>
@@ -60,22 +59,11 @@ matcher_table_t convert_to_table(std::string_view p) {
   int f = 0, i = 0;
   for (; i < p.size(); ++i) {
     switch (p[i]) {
-    case 'a' ... 'z':
-    case '.':
-      break;
     case '*':
     case '+':
       if (f < i - 1)
         table.push_back(matcher_strict{f, i - 1});
       switch (auto const c = p[i - 1]; c) {
-      case 'a' ... 'z':
-        if (table.empty() ||
-            !is_zero_more_any_char_matcher(table.back()) &&
-                !is_zero_more_spec_char_matcher_with(table.back(), c))
-          table.push_back(matcher_zero_more_char{c});
-        if ('+' == p[i])
-          table.push_back(matcher_strict_char{c});
-        break;
       case '.':
         while (!table.empty() && !is_strict_matcher(table.back()))
           table.pop_back();
@@ -84,13 +72,18 @@ matcher_table_t convert_to_table(std::string_view p) {
           table.push_back(matcher_strict_any{});
         break;
       default:
-        return {};
+        if (table.empty() ||
+            !is_zero_more_any_char_matcher(table.back()) &&
+                !is_zero_more_spec_char_matcher_with(table.back(), c))
+          table.push_back(matcher_zero_more_char{c});
+        if ('+' == p[i])
+          table.push_back(matcher_strict_char{c});
+        break;
       }
       f = i + 1;
       break;
     default:
-      throw std::invalid_argument(
-          std::string{"parser cannot recognize symbol '"} + p[i] + "'");
+      break;
     }
   }
 
