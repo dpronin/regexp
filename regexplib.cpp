@@ -81,14 +81,16 @@ matcher_table_t convert_to_table(std::string_view p) {
       f = i + 1;
       one_of = true;
       break;
-    case ']':
+    case ']': {
       if (f == i)
         throw std::invalid_argument("impossible empty [] expression");
-      table.push_back(
-          matcher_one_of_char{{p.cbegin() + f, p.cbegin() + i}, 1, 1});
+      std::vector<char> cs{p.cbegin() + f, p.cbegin() + i};
+      std::sort(cs.begin(), cs.end());
+      cs.erase(std::unique(cs.begin(), cs.end()), cs.end());
+      table.push_back(matcher_one_of_char{{std::move(cs)}, 1, 1});
       one_of = false;
       f = i + 1;
-      break;
+    } break;
     case '*':
     case '+':
       if (f < i - 1)
