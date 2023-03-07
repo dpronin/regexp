@@ -8,7 +8,7 @@
 namespace {
 
 struct matcher_strict {
-  int f, l;
+  std::vector<char> cs;
 };
 
 struct matcher_strict_char {
@@ -71,7 +71,7 @@ matcher_table_t convert_to_table(std::string_view p) {
       if (one_of)
         throw std::invalid_argument("unexpected '[' inside [] expression");
       if (f < i)
-        table.push_back(matcher_strict{f, i});
+        table.push_back(matcher_strict{{p.cbegin() + f, p.cbegin() + i}});
       f = i + 1;
       one_of = true;
       break;
@@ -85,7 +85,7 @@ matcher_table_t convert_to_table(std::string_view p) {
     case '*':
     case '+':
       if (f < i - 1)
-        table.push_back(matcher_strict{f, i - 1});
+        table.push_back(matcher_strict{{p.cbegin() + f, p.cbegin() + i - 1}});
       switch (auto const c = p[i - 1]; c) {
       case '.':
         while (!table.empty() && !is_strict_matcher(table.back()))
@@ -114,47 +114,51 @@ matcher_table_t convert_to_table(std::string_view p) {
     throw std::invalid_argument("not terminated [] expression");
 
   if (f < i)
-    table.push_back(matcher_strict{f, i});
+    table.push_back(matcher_strict{{p.cbegin() + f, p.cbegin() + i}});
 
   return table;
 }
 
-bool does_match(std::string_view s, int f, int l, std::string_view p,
-                matcher_table_t const &tb, int tbi) {
+bool does_match(std::string_view s, int f, int l, matcher_table_t const &tb,
+                int tbi) {
   return (f < l && tbi < tb.size() &&
           std::visit(
               [&](auto const &m) {
                 if constexpr (std::is_same_v<std::decay_t<decltype(m)>,
                                              matcher_strict>) {
-                  int k = m.f;
-                  for (; f < l && k < m.l && ('.' == p[k] || s[f] == p[k]);
-                       ++f, ++k)
-                    ;
-                  return m.l == k && does_match(s, f, l, p, tb, tbi + 1);
+                  auto const cmp = [](auto sc, auto pc) {
+                    return '.' == pc || sc == pc;
+                  };
+                  return std::equal(
+                             s.cbegin() + f,
+                             s.cbegin() + f +
+                                 std::min(l - f, static_cast<int>(m.cs.size())),
+                             m.cs.cbegin(), m.cs.cend(), cmp) &&
+                         does_match(s, f + m.cs.size(), l, tb, tbi + 1);
                 } else if constexpr (std::is_same_v<std::decay_t<decltype(m)>,
                                                     matcher_strict_char>) {
-                  return m.c == s[f] && does_match(s, f + 1, l, p, tb, tbi + 1);
+                  return m.c == s[f] && does_match(s, f + 1, l, tb, tbi + 1);
                 } else if constexpr (std::is_same_v<std::decay_t<decltype(m)>,
                                                     matcher_strict_any>) {
-                  return does_match(s, f + 1, l, p, tb, tbi + 1);
+                  return does_match(s, f + 1, l, tb, tbi + 1);
                 } else if constexpr (std::is_same_v<std::decay_t<decltype(m)>,
                                                     matcher_strict_one_of>) {
                   for (auto c : m.cs) {
-                    if (c == s[f] && does_match(s, f + 1, l, p, tb, tbi + 1))
+                    if (c == s[f] && does_match(s, f + 1, l, tb, tbi + 1))
                       return true;
                   }
                   return false;
-                } else if (does_match(s, f, l, p, tb, tbi + 1)) {
+                } else if (does_match(s, f, l, tb, tbi + 1)) {
                   return true;
                 } else if constexpr (std::is_same_v<std::decay_t<decltype(m)>,
                                                     matcher_zero_more_char>) {
                   for (; f < l && m.c == s[f] &&
-                         !does_match(s, f + 1, l, p, tb, tbi + 1);
+                         !does_match(s, f + 1, l, tb, tbi + 1);
                        ++f)
                     ;
                   return f < l && m.c == s[f];
                 } else {
-                  for (; f < l && !does_match(s, f + 1, l, p, tb, tbi + 1); ++f)
+                  for (; f < l && !does_match(s, f + 1, l, tb, tbi + 1); ++f)
                     ;
                   return f < l;
                 }
@@ -169,6 +173,6 @@ bool does_match(std::string_view s, int f, int l, std::string_view p,
 
 namespace regexp {
 bool does_match(std::string_view s, std::string_view p) {
-  return does_match(s, 0, s.size(), p, convert_to_table(p), 0);
+  return does_match(s, 0, s.size(), convert_to_table(p), 0);
 }
 } // namespace regexp
