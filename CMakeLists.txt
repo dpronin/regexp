@@ -30,14 +30,14 @@ if (BUILD_TESTING)
         endif()
     endif ()
 
-    # add_executable(${PROJECT_NAME}-ut
-    #     ut.cpp
-    # )
+    add_executable(${PROJECT_NAME}-ut
+        ut.cpp
+    )
 
-    # target_link_libraries(${PROJECT_NAME}-ut PRIVATE
-    #     ${PROJECT_NAME}lib
-    #     gtest::gtest
-    # )
+    target_link_libraries(${PROJECT_NAME}-ut PRIVATE
+        ${PROJECT_NAME}lib
+        gtest::gtest
+    )
 endif ()
 
 add_executable(${PROJECT_NAME}

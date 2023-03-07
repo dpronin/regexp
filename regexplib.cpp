@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <stdexcept>
 #include <string>
 #include <variant>
 #include <vector>
@@ -67,7 +68,8 @@ matcher_table_t convert_to_table(std::string_view p) {
       f = i + 1;
       break;
     default:
-      return {};
+      throw std::invalid_argument(
+          std::string{"parser cannot recognize symbol '"} + p[i] + "'");
     }
   }
 
