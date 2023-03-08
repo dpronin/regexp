@@ -6,9 +6,12 @@ if (NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-set(CMAKE_CXX_STANDARD 20)
+if (NOT CMAKE_CXX_STANDARD)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED on)
+endif()
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS true)
-set(CMAKE_CXX_STANDARD_REQUIRED on)
 
 add_library(${PROJECT_NAME}lib STATIC
     regexplib.cpp
