@@ -65,3 +65,37 @@ INSTANTIATE_TEST_SUITE_P(
     )
 );
 /* clang-format on */
+
+struct TestSuite3 : testing::TestWithParam<std::string_view> {
+};
+
+TEST_P(TestSuite3, ThrowsInvalidArgument)
+{
+    EXPECT_THROW(
+        { EXPECT_FALSE(regexp::does_match("InputStringNoMatternWhatKindOf", GetParam())); },
+        std::invalid_argument);
+}
+
+/* clang-format off */
+INSTANTIATE_TEST_SUITE_P(
+    TestSuite3Instantiation,
+    TestSuite3,
+    testing::Values(
+        "*",
+        "+",
+        "[",
+        "]",
+        "[]",
+        "b**",
+        "a++",
+        "[abc]**",
+        "[abc]++",
+        "[abc]*+",
+        "[abc]+*",
+        "[a*]",
+        "[b+]",
+        "[c[",
+        "[c[d]]"
+    )
+);
+/* clang-format on */
