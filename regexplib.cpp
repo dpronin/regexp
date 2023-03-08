@@ -1,3 +1,5 @@
+#include <cstdint>
+
 #include <algorithm>
 #include <limits>
 #include <stdexcept>
@@ -8,9 +10,11 @@
 
 namespace {
 
-struct matcher_strict {
+struct matcher_range {
   std::vector<char> cs;
 };
+
+struct matcher_strict : matcher_range {};
 
 struct matcher_strict_spec_one_char {
   char c;
@@ -24,8 +28,7 @@ struct matcher_zero_more_spec_char {
 
 struct matcher_zero_more_any_char {};
 
-struct matcher_one_of_char {
-  std::vector<char> cs;
+struct matcher_one_of_char : matcher_range {
   int m, n;
 };
 
@@ -77,7 +80,7 @@ matcher_table_t convert_to_table(std::string_view p) {
       if (one_of)
         throw std::invalid_argument("unexpected '[' inside [] expression");
       if (f < i)
-        table.push_back(matcher_strict{{p.cbegin() + f, p.cbegin() + i}});
+        table.push_back(matcher_strict{{{p.cbegin() + f, p.cbegin() + i}}});
       f = i + 1;
       one_of = true;
       break;
@@ -94,7 +97,7 @@ matcher_table_t convert_to_table(std::string_view p) {
     case '*':
     case '+':
       if (f < i - 1)
-        table.push_back(matcher_strict{{p.cbegin() + f, p.cbegin() + i - 1}});
+        table.push_back(matcher_strict{{{p.cbegin() + f, p.cbegin() + i - 1}}});
       switch (auto const c = p[i - 1]; c) {
       case '.':
         while (!table.empty() && !is_strict_matcher(table.back()))
@@ -128,7 +131,7 @@ matcher_table_t convert_to_table(std::string_view p) {
     throw std::invalid_argument("not terminated [] expression");
 
   if (f < i)
-    table.push_back(matcher_strict{{p.cbegin() + f, p.cbegin() + i}});
+    table.push_back(matcher_strict{{{p.cbegin() + f, p.cbegin() + i}}});
 
   return table;
 }
