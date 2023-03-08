@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -52,6 +53,19 @@ using matcher_t = std::variant<
 
 using matcher_table_t = std::vector<matcher_t>;
 
+enum converter_mode {
+    kDefault,
+    kOneOf,
+    kQty,
+};
+
+struct converter_ctx {
+    uint32_t f;
+    uint32_t i;
+    uint32_t l;
+    converter_mode mode;
+};
+
 template <typename... Args>
 static inline constexpr bool dependent_false_v = false;
 
@@ -63,18 +77,12 @@ static constexpr auto is_strict_matcher = [](matcher_t const& m) {
             std::get<matcher_one_of_char>(m).m > 0);
 };
 
-enum converter_mode {
-    kDefault,
-    kOneOf,
-    kQty,
-};
+using converter_handler_t =
+    std::function<bool(std::string_view p, converter_ctx& ctx, matcher_table_t& table)>;
 
-using converter_handler_t = std::function<std::tuple<uint32_t, uint32_t, converter_mode>(
-    uint32_t f, uint32_t i, uint32_t l, std::string_view p, matcher_table_t& table)>;
-
-constexpr auto converter_default =
-    [](uint32_t f, uint32_t i, uint32_t l, std::string_view p, matcher_table_t& table)
-    -> std::tuple<uint32_t, uint32_t, converter_mode> {
+constexpr auto converter_default = [](std::string_view p,
+                                      converter_ctx& ctx,
+                                      matcher_table_t& table) {
     auto is_zero_more_char_matcher = [](matcher_t const& m) {
         return std::holds_alternative<matcher_zero_more_spec_char>(m);
     };
@@ -87,112 +95,118 @@ constexpr auto converter_default =
         return std::holds_alternative<matcher_zero_more_any_char>(m);
     };
 
-    converter_mode next_mode = converter_mode::kDefault;
+    if (ctx.i >= ctx.l)
+        return false;
 
-    switch (p[i]) {
+    switch (p[ctx.i]) {
         case '[':
-            if (f < i)
-                table.push_back(matcher_strict{{{p.cbegin() + f, p.cbegin() + i}}});
-            f         = i + 1;
-            next_mode = converter_mode::kOneOf;
+            if (ctx.f < ctx.i)
+                table.push_back(matcher_strict{{{p.cbegin() + ctx.f, p.cbegin() + ctx.i}}});
+            ctx.f    = ctx.i + 1;
+            ctx.mode = converter_mode::kOneOf;
             break;
         case ']':
             throw std::invalid_argument("unexpected ']' in not opened oneof [] expression");
         case '*':
         case '+':
-            if (f < i - 1)
-                table.push_back(matcher_strict{{{p.cbegin() + f, p.cbegin() + i - 1}}});
-            switch (auto const c = p[i - 1]; c) {
+            if (ctx.f < ctx.i - 1)
+                table.push_back(matcher_strict{{{p.cbegin() + ctx.f, p.cbegin() + ctx.i - 1}}});
+            switch (auto const c = p[ctx.i - 1]; c) {
                 case '.':
                     while (!table.empty() && !is_strict_matcher(table.back()))
                         table.pop_back();
                     table.push_back(matcher_zero_more_any_char{});
-                    if ('+' == p[i])
+                    if ('+' == p[ctx.i])
                         table.push_back(matcher_strict_any_one_char{});
                     break;
                 case ']': {
                     auto& m = std::get<matcher_one_of_char>(table.back());
-                    m.m     = '*' == p[i] ? 0 : 1;
+                    m.m     = '*' == p[ctx.i] ? 0 : 1;
                     m.n     = std::numeric_limits<decltype(m.n)>::max();
                 } break;
                 default:
                     if (table.empty() || !is_zero_more_any_char_matcher(table.back()) &&
                                              !is_zero_more_spec_char_matcher_with(table.back(), c))
                         table.push_back(matcher_zero_more_spec_char{c});
-                    if ('+' == p[i])
+                    if ('+' == p[ctx.i])
                         table.push_back(matcher_strict_spec_one_char{c});
                     break;
             }
-            f = i + 1;
+            ctx.f = ctx.i + 1;
             break;
         default:
             break;
     }
+    ++ctx.i;
 
-    return {f, i + 1, next_mode};
+    return true;
 };
 
 constexpr auto converter_oneof =
-    [](uint32_t f, uint32_t i, uint32_t l, std::string_view p, matcher_table_t& table)
-    -> std::tuple<uint32_t, uint32_t, converter_mode> {
-    auto is_zero_more_char_matcher = [](matcher_t const& m) {
-        return std::holds_alternative<matcher_zero_more_spec_char>(m);
+    [](std::string_view p, converter_ctx& ctx, matcher_table_t& table) {
+        auto is_zero_more_char_matcher = [](matcher_t const& m) {
+            return std::holds_alternative<matcher_zero_more_spec_char>(m);
+        };
+
+        auto is_zero_more_spec_char_matcher_with = [&](matcher_t const& m, char c) {
+            return is_zero_more_char_matcher(m) && std::get<matcher_zero_more_spec_char>(m).c == c;
+        };
+
+        auto is_zero_more_any_char_matcher = [](matcher_t const& m) {
+            return std::holds_alternative<matcher_zero_more_any_char>(m);
+        };
+
+        if (ctx.i >= ctx.l)
+            return false;
+
+        switch (p[ctx.i]) {
+            case ']': {
+                if (ctx.f == ctx.i)
+                    throw std::invalid_argument("empty oneof [] expression is impossible");
+                std::vector<char> cs{p.cbegin() + ctx.f, p.cbegin() + ctx.i};
+                std::sort(cs.begin(), cs.end());
+                cs.erase(std::unique(cs.begin(), cs.end()), cs.end());
+                table.push_back(matcher_one_of_char{{std::move(cs)}, 1, 1});
+                ctx.f    = ctx.i + 1;
+                ctx.mode = converter_mode::kDefault;
+            } break;
+            case '[':
+            case '*':
+            case '+':
+                throw std::invalid_argument(
+                    std::string{"unexpected '"} + p[ctx.i] + "' inside opened oneof [] expression");
+            default:
+                break;
+        }
+        ++ctx.i;
+
+        return true;
     };
-
-    auto is_zero_more_spec_char_matcher_with = [&](matcher_t const& m, char c) {
-        return is_zero_more_char_matcher(m) && std::get<matcher_zero_more_spec_char>(m).c == c;
-    };
-
-    auto is_zero_more_any_char_matcher = [](matcher_t const& m) {
-        return std::holds_alternative<matcher_zero_more_any_char>(m);
-    };
-
-    converter_mode next_mode = converter_mode::kOneOf;
-
-    switch (p[i]) {
-        case ']': {
-            if (f == i)
-                throw std::invalid_argument("empty oneof [] expression is impossible");
-            std::vector<char> cs{p.cbegin() + f, p.cbegin() + i};
-            std::sort(cs.begin(), cs.end());
-            cs.erase(std::unique(cs.begin(), cs.end()), cs.end());
-            table.push_back(matcher_one_of_char{{std::move(cs)}, 1, 1});
-            f         = i + 1;
-            next_mode = converter_mode::kDefault;
-        } break;
-        case '[':
-        case '*':
-        case '+':
-            throw std::invalid_argument(
-                std::string{"unexpected '"} + p[i] + "' inside opened oneof [] expression");
-        default:
-            break;
-    }
-
-    return {f, i + 1, next_mode};
-};
 
 matcher_table_t convert_to_table(std::string_view p)
 {
     matcher_table_t table;
-
-    uint32_t f          = 0;
-    uint32_t i          = 0;
-    converter_mode mode = converter_mode::kDefault;
 
     std::array<converter_handler_t, converter_mode::kQty> const handlers = {
         converter_default,
         converter_oneof,
     };
 
-    while (i < p.size())
-        std::tie(f, i, mode) = handlers[mode](f, i, p.size(), p, table);
+    converter_ctx ctx = {
+        .f    = 0,
+        .i    = 0,
+        .l    = static_cast<uint32_t>(p.size()),
+        .mode = converter_mode::kDefault,
+    };
 
-    if (converter_mode::kOneOf == mode)
+    while (handlers[ctx.mode](p, ctx, table))
+        ;
+
+    if (converter_mode::kOneOf == ctx.mode)
         throw std::invalid_argument("not terminated [] expression");
 
-    if (f < i)
-        table.push_back(matcher_strict{{{p.cbegin() + f, p.cbegin() + i}}});
+    if (ctx.f < ctx.i)
+        table.push_back(matcher_strict{{{p.cbegin() + ctx.f, p.cbegin() + ctx.i}}});
 
     return table;
 }
