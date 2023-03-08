@@ -197,87 +197,166 @@ matcher_table_t convert_to_table(std::string_view p)
     return table;
 }
 
-bool does_match(std::string_view s, uint32_t f, uint32_t l, matcher_table_t const& tb, uint32_t tbi)
+bool does_match(
+    std::string_view::const_iterator s_first,
+    std::string_view::const_iterator s_last,
+    matcher_table_t::const_iterator tb_first,
+    matcher_table_t::const_iterator tb_last);
+
+auto constexpr does_match_with_matcher_strict =
+    [](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
+        auto const cmp = [](auto sc, auto pc) { return '.' == pc || sc == pc; };
+        return std::equal(
+                   s_first,
+                   s_first +
+                       std::min(static_cast<size_t>(std::distance(s_last, s_first)), m.cs.size()),
+                   m.cs.cbegin(),
+                   m.cs.cend(),
+                   cmp) &&
+               does_match(s_first + m.cs.size(), s_last, tb_first + 1, tb_last);
+    };
+
+auto constexpr does_match_with_matcher_strict_spec_one_char =
+    [](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
+        return m.c == *s_first && does_match(s_first + 1, s_last, tb_first + 1, tb_last);
+    };
+
+auto constexpr does_match_with_matcher_strict_any_one_char =
+    [](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
+        return does_match(s_first + 1, s_last, tb_first + 1, tb_last);
+    };
+
+auto constexpr does_match_with_matcher_one_of_char =
+    [](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
+        auto const any_of = [&](auto c) {
+            return std::any_of(m.cs.cbegin(), m.cs.cend(), [c](auto pc) { return c == pc; });
+        };
+
+        uint32_t k = 0;
+        for (; k < m.m && s_first < s_last && any_of(*s_first); ++k, ++s_first)
+            ;
+
+        if (k == m.m) {
+            if (does_match(s_first, s_last, tb_first + 1, tb_last))
+                return true;
+
+            for (; k < m.n && s_first < s_last && any_of(*s_first) &&
+                   !does_match(s_first + 1, s_last, tb_first + 1, tb_last);
+                 ++k, ++s_first)
+                ;
+
+            return s_first < s_last && any_of(*s_first);
+        }
+
+        return false;
+    };
+
+auto constexpr does_match_with_matcher_zero_more_spec_char =
+    [](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
+        if (does_match(s_first, s_last, tb_first + 1, tb_last))
+            return true;
+        for (; s_first < s_last && m.c == *s_first &&
+               !does_match(s_first + 1, s_last, tb_first + 1, tb_last);
+             ++s_first)
+            ;
+        return s_first < s_last && m.c == *s_first;
+    };
+
+auto constexpr does_match_with_matcher_zero_more_any_char =
+    [](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
+        if (does_match(s_first, s_last, tb_first + 1, tb_last))
+            return true;
+        for (; s_first < s_last && !does_match(s_first + 1, s_last, tb_first + 1, tb_last);
+             ++s_first)
+            ;
+        return s_first < s_last;
+    };
+
+bool does_match(
+    std::string_view::const_iterator s_first,
+    std::string_view::const_iterator s_last,
+    matcher_table_t::const_iterator tb_first,
+    matcher_table_t::const_iterator tb_last)
 {
-    return (f < l && tbi < tb.size() &&
+    return (s_first < s_last && tb_first < tb_last &&
             std::visit(
                 [&](auto const& m) {
                     if constexpr (std::is_same_v<std::decay_t<decltype(m)>, matcher_strict>) {
-                        auto const cmp = [](auto sc, auto pc) { return '.' == pc || sc == pc; };
-                        return std::equal(
-                                   s.cbegin() + f,
-                                   s.cbegin() + f +
-                                       std::min(l - f, static_cast<uint32_t>(m.cs.size())),
-                                   m.cs.cbegin(),
-                                   m.cs.cend(),
-                                   cmp) &&
-                               does_match(s, f + m.cs.size(), l, tb, tbi + 1);
+                        return does_match_with_matcher_strict(
+                            m,
+                            s_first,
+                            s_last,
+                            tb_first,
+                            tb_last);
                     } else if constexpr (std::is_same_v<
                                              std::decay_t<decltype(m)>,
                                              matcher_strict_spec_one_char>) {
-                        return m.c == s[f] && does_match(s, f + 1, l, tb, tbi + 1);
+                        return does_match_with_matcher_strict_spec_one_char(
+                            m,
+                            s_first,
+                            s_last,
+                            tb_first,
+                            tb_last);
                     } else if constexpr (std::is_same_v<
                                              std::decay_t<decltype(m)>,
                                              matcher_strict_any_one_char>) {
-                        return does_match(s, f + 1, l, tb, tbi + 1);
+                        return does_match_with_matcher_strict_any_one_char(
+                            m,
+                            s_first,
+                            s_last,
+                            tb_first,
+                            tb_last);
                     } else if constexpr (std::is_same_v<
                                              std::decay_t<decltype(m)>,
                                              matcher_one_of_char>) {
-                        auto const any_of = [&](auto c) {
-                            return std::any_of(m.cs.cbegin(), m.cs.cend(), [c](auto pc) {
-                                return c == pc;
-                            });
-                        };
-
-                        uint32_t k = 0;
-                        for (; k < m.m && f < l && any_of(s[f]); ++k, ++f)
-                            ;
-
-                        if (k == m.m) {
-                            if (does_match(s, f, l, tb, tbi + 1))
-                                return true;
-
-                            for (; k < m.n && f < l && any_of(s[f]) &&
-                                   !does_match(s, f + 1, l, tb, tbi + 1);
-                                 ++k, ++f)
-                                ;
-
-                            return f < l && any_of(s[f]);
-                        }
-
-                        return false;
-                    } else if (does_match(s, f, l, tb, tbi + 1)) {
-                        return true;
+                        return does_match_with_matcher_one_of_char(
+                            m,
+                            s_first,
+                            s_last,
+                            tb_first,
+                            tb_last);
                     } else if constexpr (std::is_same_v<
                                              std::decay_t<decltype(m)>,
                                              matcher_zero_more_spec_char>) {
-                        for (; f < l && m.c == s[f] && !does_match(s, f + 1, l, tb, tbi + 1); ++f)
-                            ;
-                        return f < l && m.c == s[f];
+                        return does_match_with_matcher_zero_more_spec_char(
+                            m,
+                            s_first,
+                            s_last,
+                            tb_first,
+                            tb_last);
                     } else if constexpr (std::is_same_v<
                                              std::decay_t<decltype(m)>,
                                              matcher_zero_more_any_char>) {
-                        for (; f < l && !does_match(s, f + 1, l, tb, tbi + 1); ++f)
-                            ;
-                        return f < l;
+                        return does_match_with_matcher_zero_more_any_char(
+                            m,
+                            s_first,
+                            s_last,
+                            tb_first,
+                            tb_last);
                     } else {
                         static_assert(
                             dependent_false_v<std::decay_t<decltype(m)>>,
                             "unhandled matcher type");
                     }
                 },
-                tb[tbi])) ||
-           (f == l && std::all_of(tb.cbegin() + tbi, tb.cend(), [](auto const& m) {
-                return !is_strict_matcher(m);
-            }));
+                *tb_first)) ||
+           (s_first == s_last &&
+            std::all_of(tb_first, tb_last, [](auto const& m) { return !is_strict_matcher(m); }));
+}
+
+bool does_match(std::string_view s, matcher_table_t const& tb)
+{
+    return does_match(s.cbegin(), s.cend(), tb.cbegin(), tb.cend());
 }
 
 } // namespace
 
 namespace regexp
 {
+
 bool does_match(std::string_view s, std::string_view p)
 {
-    return does_match(s, 0, s.size(), convert_to_table(p), 0);
+    return does_match(s, convert_to_table(p));
 }
+
 } // namespace regexp
