@@ -6,16 +6,16 @@
 #include "gtest/gtest.h"
 
 struct TestParam {
-  std::string_view input;
-  std::string_view pattern;
+    std::string_view input;
+    std::string_view pattern;
 };
 
-struct TestSuite1 : testing::TestWithParam<TestParam> {};
+struct TestSuite1 : testing::TestWithParam<TestParam> {
+};
 
-TEST_P(TestSuite1, Matches) {
-  EXPECT_NO_THROW({
-    EXPECT_TRUE(regexp::does_match(GetParam().input, GetParam().pattern));
-  });
+TEST_P(TestSuite1, Matches)
+{
+    EXPECT_NO_THROW({ EXPECT_TRUE(regexp::does_match(GetParam().input, GetParam().pattern)); });
 }
 
 /* clang-format off */
@@ -40,12 +40,12 @@ INSTANTIATE_TEST_SUITE_P(
 );
 /* clang-format on */
 
-struct TestSuite2 : testing::TestWithParam<TestParam> {};
+struct TestSuite2 : testing::TestWithParam<TestParam> {
+};
 
-TEST_P(TestSuite2, DoesNotMatch) {
-  EXPECT_NO_THROW({
-    EXPECT_FALSE(regexp::does_match(GetParam().input, GetParam().pattern));
-  });
+TEST_P(TestSuite2, DoesNotMatch)
+{
+    EXPECT_NO_THROW({ EXPECT_FALSE(regexp::does_match(GetParam().input, GetParam().pattern)); });
 }
 
 /* clang-format off */
