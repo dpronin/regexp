@@ -96,7 +96,7 @@ constexpr auto converter_default = [](std::string_view p,
     if (ctx.i >= ctx.l)
         return false;
 
-    switch (p[ctx.i]) {
+    switch (auto const c = p[ctx.i]; c) {
         case '[':
             if (ctx.f < ctx.i)
                 table.push_back(matcher_strict{{{p.cbegin() + ctx.f, p.cbegin() + ctx.i}}});
@@ -107,9 +107,13 @@ constexpr auto converter_default = [](std::string_view p,
             throw std::invalid_argument("unexpected ']' in not opened oneof [] expression");
         case '*':
         case '+':
+            if (ctx.f == ctx.i)
+                throw std::invalid_argument(
+                    std::string{"unexpected '"} + c + "' without previous symbol or expression");
+
             if (ctx.f < ctx.i - 1)
                 table.push_back(matcher_strict{{{p.cbegin() + ctx.f, p.cbegin() + ctx.i - 1}}});
-            switch (auto const c = p[ctx.i - 1]; c) {
+            switch (auto const pc = p[ctx.i - 1]; pc) {
                 case '.':
                     while (!table.empty() && does_allow_zero_occurrences(table.back()))
                         table.pop_back();
@@ -119,10 +123,10 @@ constexpr auto converter_default = [](std::string_view p,
                     break;
                 default:
                     if (table.empty() || !is_zero_more_any_char_matcher(table.back()) &&
-                                             !is_zero_more_spec_char_matcher_with(table.back(), c))
-                        table.push_back(matcher_zero_more_spec_char{c});
+                                             !is_zero_more_spec_char_matcher_with(table.back(), pc))
+                        table.push_back(matcher_zero_more_spec_char{pc});
                     if ('+' == p[ctx.i])
-                        table.push_back(matcher_strict_spec_one_char{c});
+                        table.push_back(matcher_strict_spec_one_char{pc});
                     break;
             }
             ctx.f = ctx.i + 1;
