@@ -67,12 +67,22 @@ struct converter_ctx {
 };
 
 template <typename... Args>
-static inline constexpr bool dependent_false_v = false;
+constexpr bool dependent_false_v = false;
 
-static constexpr auto is_strict_matcher = [](matcher_t const& m) {
-    return std::holds_alternative<matcher_strict>(m) ||
-           std::holds_alternative<matcher_strict_spec_one_char>(m) ||
-           std::holds_alternative<matcher_strict_any_one_char>(m) ||
+constexpr auto is_zero_more_char_matcher = [](matcher_t const& m) {
+    return std::holds_alternative<matcher_zero_more_spec_char>(m);
+};
+
+constexpr auto is_zero_more_spec_char_matcher_with = [](matcher_t const& m, char c) {
+    return is_zero_more_char_matcher(m) && std::get<matcher_zero_more_spec_char>(m).c == c;
+};
+
+constexpr auto is_zero_more_any_char_matcher = [](matcher_t const& m) {
+    return std::holds_alternative<matcher_zero_more_any_char>(m);
+};
+
+constexpr auto does_allow_zero_occurrences = [](matcher_t const& m) {
+    return is_zero_more_char_matcher(m) || is_zero_more_any_char_matcher(m) ||
            (std::holds_alternative<matcher_one_of_char>(m) &&
             std::get<matcher_one_of_char>(m).m > 0);
 };
@@ -83,18 +93,6 @@ using converter_handler_t =
 constexpr auto converter_default = [](std::string_view p,
                                       converter_ctx& ctx,
                                       matcher_table_t& table) {
-    auto is_zero_more_char_matcher = [](matcher_t const& m) {
-        return std::holds_alternative<matcher_zero_more_spec_char>(m);
-    };
-
-    auto is_zero_more_spec_char_matcher_with = [&](matcher_t const& m, char c) {
-        return is_zero_more_char_matcher(m) && std::get<matcher_zero_more_spec_char>(m).c == c;
-    };
-
-    auto is_zero_more_any_char_matcher = [](matcher_t const& m) {
-        return std::holds_alternative<matcher_zero_more_any_char>(m);
-    };
-
     if (ctx.i >= ctx.l)
         return false;
 
@@ -113,7 +111,7 @@ constexpr auto converter_default = [](std::string_view p,
                 table.push_back(matcher_strict{{{p.cbegin() + ctx.f, p.cbegin() + ctx.i - 1}}});
             switch (auto const c = p[ctx.i - 1]; c) {
                 case '.':
-                    while (!table.empty() && !is_strict_matcher(table.back()))
+                    while (!table.empty() && does_allow_zero_occurrences(table.back()))
                         table.pop_back();
                     table.push_back(matcher_zero_more_any_char{});
                     if ('+' == p[ctx.i])
@@ -144,18 +142,6 @@ constexpr auto converter_default = [](std::string_view p,
 
 constexpr auto converter_oneof =
     [](std::string_view p, converter_ctx& ctx, matcher_table_t& table) {
-        auto is_zero_more_char_matcher = [](matcher_t const& m) {
-            return std::holds_alternative<matcher_zero_more_spec_char>(m);
-        };
-
-        auto is_zero_more_spec_char_matcher_with = [&](matcher_t const& m, char c) {
-            return is_zero_more_char_matcher(m) && std::get<matcher_zero_more_spec_char>(m).c == c;
-        };
-
-        auto is_zero_more_any_char_matcher = [](matcher_t const& m) {
-            return std::holds_alternative<matcher_zero_more_any_char>(m);
-        };
-
         if (ctx.i >= ctx.l)
             return false;
 
@@ -354,8 +340,7 @@ bool does_match(
                     }
                 },
                 *tb_first)) ||
-           (s_first == s_last &&
-            std::all_of(tb_first, tb_last, [](auto const& m) { return !is_strict_matcher(m); }));
+           (s_first == s_last && std::all_of(tb_first, tb_last, does_allow_zero_occurrences));
 }
 
 bool does_match(std::string_view s, matcher_table_t const& tb)
