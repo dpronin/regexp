@@ -117,11 +117,6 @@ constexpr auto converter_default = [](std::string_view p,
                     if ('+' == p[ctx.i])
                         table.push_back(matcher_strict_any_one_char{});
                     break;
-                case ']': {
-                    auto& m = std::get<matcher_one_of_char>(table.back());
-                    m.m     = '*' == p[ctx.i] ? 0 : 1;
-                    m.n     = std::numeric_limits<decltype(m.n)>::max();
-                } break;
                 default:
                     if (table.empty() || !is_zero_more_any_char_matcher(table.back()) &&
                                              !is_zero_more_spec_char_matcher_with(table.back(), c))
@@ -145,14 +140,28 @@ constexpr auto converter_oneof =
         if (ctx.i >= ctx.l)
             return false;
 
-        switch (p[ctx.i]) {
+        switch (auto const c = p[ctx.i]; c) {
             case ']': {
                 if (ctx.f == ctx.i)
                     throw std::invalid_argument("empty oneof [] expression is impossible");
                 std::vector<char> cs{p.cbegin() + ctx.f, p.cbegin() + ctx.i};
                 std::sort(cs.begin(), cs.end());
                 cs.erase(std::unique(cs.begin(), cs.end()), cs.end());
-                table.push_back(matcher_one_of_char{{std::move(cs)}, 1, 1});
+                matcher_one_of_char m{{std::move(cs)}, 1, 1};
+                if (ctx.i + 1 < ctx.l) {
+                    switch (auto const nc = p[ctx.i + 1]; nc) {
+                        case '*':
+                            m.m = 0;
+                            [[fallthrough]];
+                        case '+': {
+                            m.n = std::numeric_limits<decltype(m.n)>::max();
+                            ++ctx.i;
+                        } break;
+                        default:
+                            break;
+                    }
+                }
+                table.push_back(std::move(m));
                 ctx.f    = ctx.i + 1;
                 ctx.mode = converter_mode::kDefault;
             } break;
@@ -160,7 +169,7 @@ constexpr auto converter_oneof =
             case '*':
             case '+':
                 throw std::invalid_argument(
-                    std::string{"unexpected '"} + p[ctx.i] + "' inside opened oneof [] expression");
+                    std::string{"unexpected '"} + c + "' inside opened oneof [] expression");
             default:
                 break;
         }
