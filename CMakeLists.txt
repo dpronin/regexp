@@ -37,6 +37,8 @@ if (BUILD_TESTING)
         ut.cpp
     )
 
+    add_test(${PROJECT_NAME}-ut ${PROJECT_NAME}-ut)
+
     target_link_libraries(${PROJECT_NAME}-ut PRIVATE
         ${PROJECT_NAME}lib
         gtest::gtest
