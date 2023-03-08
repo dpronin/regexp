@@ -41,7 +41,8 @@ if (BUILD_TESTING)
 
     target_link_libraries(${PROJECT_NAME}-ut PRIVATE
         ${PROJECT_NAME}lib
-        gtest::gtest
+        GTest::gtest
+        GTest::gtest_main
     )
 endif ()
 
