@@ -29,7 +29,7 @@ struct matcher_zero_more_spec_char {
 struct matcher_zero_more_any_char {};
 
 struct matcher_one_of_char : matcher_range {
-  int m, n;
+  uint32_t m, n;
 };
 
 /* clang-format off */
@@ -73,7 +73,7 @@ matcher_table_t convert_to_table(std::string_view p) {
   };
 
   bool one_of = false;
-  int f = 0, i = 0;
+  uint32_t f = 0, i = 0;
   for (; i < p.size(); ++i) {
     switch (p[i]) {
     case '[':
@@ -109,7 +109,7 @@ matcher_table_t convert_to_table(std::string_view p) {
       case ']': {
         auto &m = std::get<matcher_one_of_char>(table.back());
         m.m = '*' == p[i] ? 0 : 1;
-        m.n = std::numeric_limits<int>::max();
+        m.n = std::numeric_limits<decltype(m.n)>::max();
       } break;
       default:
         if (table.empty() ||
@@ -136,8 +136,8 @@ matcher_table_t convert_to_table(std::string_view p) {
   return table;
 }
 
-bool does_match(std::string_view s, int f, int l, matcher_table_t const &tb,
-                int tbi) {
+bool does_match(std::string_view s, uint32_t f, uint32_t l,
+                matcher_table_t const &tb, uint32_t tbi) {
   return (f < l && tbi < tb.size() &&
           std::visit(
               [&](auto const &m) {
@@ -146,11 +146,11 @@ bool does_match(std::string_view s, int f, int l, matcher_table_t const &tb,
                   auto const cmp = [](auto sc, auto pc) {
                     return '.' == pc || sc == pc;
                   };
-                  return std::equal(
-                             s.cbegin() + f,
-                             s.cbegin() + f +
-                                 std::min(l - f, static_cast<int>(m.cs.size())),
-                             m.cs.cbegin(), m.cs.cend(), cmp) &&
+                  return std::equal(s.cbegin() + f,
+                                    s.cbegin() + f +
+                                        std::min(l - f, static_cast<uint32_t>(
+                                                            m.cs.size())),
+                                    m.cs.cbegin(), m.cs.cend(), cmp) &&
                          does_match(s, f + m.cs.size(), l, tb, tbi + 1);
                 } else if constexpr (std::is_same_v<
                                          std::decay_t<decltype(m)>,
@@ -167,7 +167,7 @@ bool does_match(std::string_view s, int f, int l, matcher_table_t const &tb,
                                        [c](auto pc) { return c == pc; });
                   };
 
-                  int k = 0;
+                  uint32_t k = 0;
                   for (; k < m.m && f < l && any_of(s[f]); ++k, ++f)
                     ;
 
