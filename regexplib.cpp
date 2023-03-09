@@ -61,11 +61,20 @@ enum converter_mode {
     kQty,
 };
 
+template <typename InputIt>
 struct converter_ctx {
-    uint32_t f;
-    uint32_t i;
-    uint32_t l;
-    converter_mode mode;
+    converter_ctx(InputIt b, InputIt e)
+        : f(b)
+        , i(b)
+        , l(e)
+    {
+    }
+
+    InputIt f;
+    InputIt i;
+    InputIt l;
+
+    converter_mode mode = converter_mode::kDefault;
 };
 
 template <typename... Args>
@@ -89,22 +98,24 @@ constexpr auto does_allow_zero_occurrences = [](matcher_t const& m) {
             std::get<matcher_one_of_char>(m).m > 0);
 };
 
-using converter_handler_t =
-    std::function<bool(std::string_view p, converter_ctx& ctx, matcher_table_t& table)>;
+using converter_handler_t = std::function<bool(
+    std::string_view p,
+    converter_ctx<std::string_view::const_iterator>& ctx,
+    matcher_table_t& table)>;
 
 constexpr auto converter_default = [](std::string_view p,
-                                      converter_ctx& ctx,
+                                      converter_ctx<std::string_view::const_iterator>& ctx,
                                       matcher_table_t& table) {
     if (ctx.i >= ctx.l) {
         if (ctx.f < ctx.i)
-            table.push_back(matcher_strict{{{p.cbegin() + ctx.f, p.cbegin() + ctx.i}}});
+            table.push_back(matcher_strict{{{ctx.f, ctx.i}}});
         return false;
     }
 
-    switch (auto const c = p[ctx.i]; c) {
+    switch (auto const c = *ctx.i; c) {
         case '[':
             if (ctx.f < ctx.i)
-                table.push_back(matcher_strict{{{p.cbegin() + ctx.f, p.cbegin() + ctx.i}}});
+                table.push_back(matcher_strict{{{ctx.f, ctx.i}}});
             ctx.f    = ctx.i + 1;
             ctx.mode = converter_mode::kOneOf;
             break;
@@ -117,20 +128,20 @@ constexpr auto converter_default = [](std::string_view p,
                     std::string{"unexpected '"} + c + "' without previous symbol or expression");
 
             if (ctx.f < ctx.i - 1)
-                table.push_back(matcher_strict{{{p.cbegin() + ctx.f, p.cbegin() + ctx.i - 1}}});
-            switch (auto const pc = p[ctx.i - 1]; pc) {
+                table.push_back(matcher_strict{{{ctx.f, ctx.i - 1}}});
+            switch (auto const pc = ctx.i[-1]; pc) {
                 case '.':
                     while (!table.empty() && does_allow_zero_occurrences(table.back()))
                         table.pop_back();
                     table.push_back(matcher_zero_more_any_char{});
-                    if ('+' == p[ctx.i])
+                    if ('+' == *ctx.i)
                         table.push_back(matcher_strict_any_one_char{});
                     break;
                 default:
                     if (table.empty() || !is_zero_more_any_char_matcher(table.back()) &&
                                              !is_zero_more_spec_char_matcher_with(table.back(), pc))
                         table.push_back(matcher_zero_more_spec_char{pc});
-                    if ('+' == p[ctx.i])
+                    if ('+' == *ctx.i)
                         table.push_back(matcher_strict_spec_one_char{pc});
                     break;
             }
@@ -144,48 +155,49 @@ constexpr auto converter_default = [](std::string_view p,
     return true;
 };
 
-constexpr auto converter_oneof =
-    [](std::string_view p, converter_ctx& ctx, matcher_table_t& table) {
-        if (ctx.i >= ctx.l)
-            throw std::invalid_argument("not terminated oneof [] expression");
+constexpr auto converter_oneof = [](std::string_view p,
+                                    converter_ctx<std::string_view::const_iterator>& ctx,
+                                    matcher_table_t& table) {
+    if (ctx.i >= ctx.l)
+        throw std::invalid_argument("not terminated oneof [] expression");
 
-        switch (auto const c = p[ctx.i]; c) {
-            case ']': {
-                if (ctx.f == ctx.i)
-                    throw std::invalid_argument("empty oneof [] expression is impossible");
-                std::vector<char> cs{p.cbegin() + ctx.f, p.cbegin() + ctx.i};
-                std::sort(cs.begin(), cs.end());
-                cs.erase(std::unique(cs.begin(), cs.end()), cs.end());
-                matcher_one_of_char m{{std::move(cs)}, 1, 1};
-                if (ctx.i + 1 < ctx.l) {
-                    switch (auto const nc = p[ctx.i + 1]; nc) {
-                        case '*':
-                            m.m = 0;
-                            [[fallthrough]];
-                        case '+': {
-                            m.n = std::numeric_limits<decltype(m.n)>::max();
-                            ++ctx.i;
-                        } break;
-                        default:
-                            break;
-                    }
+    switch (auto const c = *ctx.i; c) {
+        case ']': {
+            if (ctx.f == ctx.i)
+                throw std::invalid_argument("empty oneof [] expression is impossible");
+            std::vector<char> cs{ctx.f, ctx.i};
+            std::sort(cs.begin(), cs.end());
+            cs.erase(std::unique(cs.begin(), cs.end()), cs.end());
+            matcher_one_of_char m{{std::move(cs)}, 1, 1};
+            if (ctx.i + 1 < ctx.l) {
+                switch (auto const nc = ctx.i[1]; nc) {
+                    case '*':
+                        m.m = 0;
+                        [[fallthrough]];
+                    case '+': {
+                        m.n = std::numeric_limits<decltype(m.n)>::max();
+                        ++ctx.i;
+                    } break;
+                    default:
+                        break;
                 }
-                table.push_back(std::move(m));
-                ctx.f    = ctx.i + 1;
-                ctx.mode = converter_mode::kDefault;
-            } break;
-            case '[':
-            case '*':
-            case '+':
-                throw std::invalid_argument(
-                    std::string{"unexpected '"} + c + "' inside opened oneof [] expression");
-            default:
-                break;
-        }
-        ++ctx.i;
+            }
+            table.push_back(std::move(m));
+            ctx.f    = ctx.i + 1;
+            ctx.mode = converter_mode::kDefault;
+        } break;
+        case '[':
+        case '*':
+        case '+':
+            throw std::invalid_argument(
+                std::string{"unexpected '"} + c + "' inside opened oneof [] expression");
+        default:
+            break;
+    }
+    ++ctx.i;
 
-        return true;
-    };
+    return true;
+};
 
 matcher_table_t convert_to_table(std::string_view p)
 {
@@ -196,14 +208,7 @@ matcher_table_t convert_to_table(std::string_view p)
         converter_oneof,
     };
 
-    converter_ctx ctx = {
-        .f    = 0,
-        .i    = 0,
-        .l    = static_cast<uint32_t>(p.size()),
-        .mode = converter_mode::kDefault,
-    };
-
-    while (handlers[ctx.mode](p, ctx, table))
+    for (converter_ctx ctx{p.cbegin(), p.cend()}; handlers[ctx.mode](p, ctx, table);)
         ;
 
     return table;
