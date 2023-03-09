@@ -95,7 +95,7 @@ constexpr auto is_zero_more_any_char_matcher = [](matcher_t const& m) {
 constexpr auto does_allow_zero_occurrences = [](matcher_t const& m) {
     return is_zero_more_char_matcher(m) || is_zero_more_any_char_matcher(m) ||
            (std::holds_alternative<matcher_one_of_char>(m) &&
-            std::get<matcher_one_of_char>(m).m > 0);
+            0 == std::get<matcher_one_of_char>(m).m);
 };
 
 using converter_handler_t = std::function<bool(
