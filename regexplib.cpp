@@ -21,35 +21,29 @@ struct matcher_range {
     Range cs;
 };
 
-struct matcher_strict : matcher_range<std::string_view> {
-};
-
-struct matcher_strict_spec_one_char {
-    char c;
-};
-
-struct matcher_strict_any_one_char {
-};
-
-struct matcher_zero_more_spec_char {
-    char c;
-};
-
-struct matcher_zero_more_any_char {
-};
-
-struct matcher_one_of_char : matcher_range<std::vector<char>> {
+struct min_max_rule {
     uint32_t m, n;
+};
+
+struct matcher_range_strict : matcher_range<std::string_view> {
+};
+
+struct matcher_spec_char : min_max_rule {
+    char c;
+};
+
+struct matcher_any_char : min_max_rule {
+};
+
+struct matcher_range_one_of_char : matcher_range<std::vector<char>>, min_max_rule {
 };
 
 /* clang-format off */
 using matcher_t = std::variant<
-  matcher_strict,
-  matcher_strict_spec_one_char,
-  matcher_strict_any_one_char,
-  matcher_zero_more_spec_char,
-  matcher_zero_more_any_char,
-  matcher_one_of_char
+  matcher_range_strict,
+  matcher_spec_char,
+  matcher_any_char,
+  matcher_range_one_of_char
 >;
 /* clang-format on */
 
@@ -58,6 +52,8 @@ using matcher_table_t = std::vector<matcher_t>;
 enum converter_mode {
     kDefault,
     kOneOf,
+    kOccurrencesSpecMin,
+    kOccurrencesSpecMax,
     kQty,
 };
 
@@ -74,28 +70,33 @@ struct converter_ctx {
     InputIt i;
     InputIt l;
 
+    uint32_t m, n;
+
     converter_mode mode = converter_mode::kDefault;
 };
 
 template <typename... Args>
 constexpr bool dependent_false_v = false;
 
-constexpr auto is_zero_more_char_matcher = [](matcher_t const& m) {
-    return std::holds_alternative<matcher_zero_more_spec_char>(m);
+constexpr auto does_allow_zero_occurrences = [](matcher_t const& matcher) {
+    return std::visit(
+        [](auto const& m) {
+            if constexpr (std::is_base_of_v<min_max_rule, std::decay_t<decltype(m)>>)
+                return 0 == m.m;
+            else
+                return false;
+        },
+        matcher);
 };
 
-constexpr auto is_zero_more_spec_char_matcher_with = [](matcher_t const& m, char c) {
-    return is_zero_more_char_matcher(m) && std::get<matcher_zero_more_spec_char>(m).c == c;
+constexpr auto is_zero_more_spec_char_matcher_with = [](matcher_t const& matcher, char c) {
+    return std::holds_alternative<matcher_spec_char>(matcher) &&
+           does_allow_zero_occurrences(matcher) && std::get<matcher_spec_char>(matcher).c == c;
 };
 
-constexpr auto is_zero_more_any_char_matcher = [](matcher_t const& m) {
-    return std::holds_alternative<matcher_zero_more_any_char>(m);
-};
-
-constexpr auto does_allow_zero_occurrences = [](matcher_t const& m) {
-    return is_zero_more_char_matcher(m) || is_zero_more_any_char_matcher(m) ||
-           (std::holds_alternative<matcher_one_of_char>(m) &&
-            0 == std::get<matcher_one_of_char>(m).m);
+constexpr auto is_zero_more_any_char_matcher = [](matcher_t const& matcher) {
+    return std::holds_alternative<matcher_any_char>(matcher) &&
+           does_allow_zero_occurrences(matcher);
 };
 
 using converter_handler_t = std::function<bool(
@@ -108,47 +109,75 @@ constexpr auto converter_default = [](std::string_view p,
                                       matcher_table_t& table) {
     if (ctx.i >= ctx.l) {
         if (ctx.f < ctx.i)
-            table.push_back(matcher_strict{{{ctx.f, ctx.i}}});
+            table.push_back(matcher_range_strict{{{ctx.f, ctx.i}}});
         return false;
     }
 
     switch (auto const c = *ctx.i; c) {
         case '[':
             if (ctx.f < ctx.i)
-                table.push_back(matcher_strict{{{ctx.f, ctx.i}}});
+                table.push_back(matcher_range_strict{{{ctx.f, ctx.i}}});
             ctx.f    = ctx.i + 1;
             ctx.mode = converter_mode::kOneOf;
             break;
-        case ']':
-            throw std::invalid_argument("unexpected ']' in not opened oneof [] expression");
         case '*':
         case '+':
+        case '{':
             if (ctx.f == ctx.i)
                 throw std::invalid_argument(
                     std::string{"unexpected '"} + c + "' without previous symbol or expression");
 
             if (ctx.f < ctx.i - 1)
-                table.push_back(matcher_strict{{{ctx.f, ctx.i - 1}}});
-            switch (auto const pc = ctx.i[-1]; pc) {
-                case '.':
-                    while (!table.empty() && does_allow_zero_occurrences(table.back()))
-                        table.pop_back();
-                    table.push_back(matcher_zero_more_any_char{});
-                    if ('+' == *ctx.i)
-                        table.push_back(matcher_strict_any_one_char{});
+                table.push_back(matcher_range_strict{{{ctx.f, ctx.i - 1}}});
+
+            switch (c) {
+                case '*':
+                case '+':
+                    switch (auto const pc = ctx.i[-1]; pc) {
+                        case '.':
+                            while (!table.empty() && does_allow_zero_occurrences(table.back()))
+                                table.pop_back();
+                            table.push_back(
+                                matcher_any_char{{0, std::numeric_limits<uint32_t>::max()}});
+                            if ('+' == c)
+                                table.push_back(matcher_any_char{{1, 1}});
+                            break;
+                        default:
+                            if (table.empty() ||
+                                !is_zero_more_any_char_matcher(table.back()) &&
+                                    !is_zero_more_spec_char_matcher_with(table.back(), pc))
+                                table.push_back(matcher_spec_char{
+                                    {0, std::numeric_limits<uint32_t>::max()},
+                                    pc});
+                            if ('+' == c)
+                                table.push_back(matcher_spec_char{{1, 1}, pc});
+                            break;
+                    }
                     break;
                 default:
-                    if (table.empty() || !is_zero_more_any_char_matcher(table.back()) &&
-                                             !is_zero_more_spec_char_matcher_with(table.back(), pc))
-                        table.push_back(matcher_zero_more_spec_char{pc});
-                    if ('+' == *ctx.i)
-                        table.push_back(matcher_strict_spec_one_char{pc});
+                    switch (auto const pc = ctx.i[-1]; pc) {
+                        case '.':
+                            table.push_back(matcher_any_char{{1, 1}});
+                            break;
+                        default:
+                            table.push_back(matcher_spec_char{{1, 1}, pc});
+                            break;
+                    }
+                    ctx.m    = 0;
+                    ctx.n    = 0;
+                    ctx.mode = converter_mode::kOccurrencesSpecMin;
                     break;
             }
+
             ctx.f = ctx.i + 1;
             break;
         default:
             break;
+        case ']':
+            throw std::invalid_argument("unexpected ']' in not opened oneof [] expression");
+        case '}':
+            throw std::invalid_argument(
+                "unexpected '}' in not opened occurrences specifier {} expression");
     }
     ++ctx.i;
 
@@ -168,23 +197,29 @@ constexpr auto converter_oneof = [](std::string_view p,
             std::vector<char> cs{ctx.f, ctx.i};
             std::sort(cs.begin(), cs.end());
             cs.erase(std::unique(cs.begin(), cs.end()), cs.end());
-            matcher_one_of_char m{{std::move(cs)}, 1, 1};
+            matcher_range_one_of_char m{{std::move(cs)}, 1, 1};
+            ctx.mode = converter_mode::kDefault;
             if (ctx.i + 1 < ctx.l) {
                 switch (auto const nc = ctx.i[1]; nc) {
+                    case '{':
+                        ctx.m = 0;
+                        ctx.n = 0;
+                        ++ctx.i;
+                        ctx.mode = converter_mode::kOccurrencesSpecMin;
+                        break;
                     case '*':
                         m.m = 0;
                         [[fallthrough]];
-                    case '+': {
+                    case '+':
                         m.n = std::numeric_limits<decltype(m.n)>::max();
                         ++ctx.i;
-                    } break;
+                        [[fallthrough]];
                     default:
                         break;
                 }
             }
             table.push_back(std::move(m));
-            ctx.f    = ctx.i + 1;
-            ctx.mode = converter_mode::kDefault;
+            ctx.f = ctx.i + 1;
         } break;
         case '[':
         case '*':
@@ -199,9 +234,91 @@ constexpr auto converter_oneof = [](std::string_view p,
     return true;
 };
 
+constexpr auto converter_occur_spec_min = [](std::string_view p,
+                                             converter_ctx<std::string_view::const_iterator>& ctx,
+                                             matcher_table_t& table) {
+    if (ctx.i >= ctx.l)
+        throw std::invalid_argument("not terminated occurrences specifier {} expression");
+
+    switch (auto const c = *ctx.i; c) {
+        case '0' ... '9':
+            ctx.m = ctx.m * 10 + c - '0';
+            break;
+        case '}':
+            if (ctx.f == ctx.i)
+                throw std::invalid_argument(
+                    "empty occurrences specifier {} expression is impossible");
+            ctx.n = ctx.m;
+            std::visit(
+                [&](auto& m) {
+                    if constexpr (std::is_base_of_v<min_max_rule, std::decay_t<decltype(m)>>) {
+                        m.m = ctx.m;
+                        m.n = ctx.n;
+                    } else {
+                        throw std::invalid_argument("invalid type of matcher on the top of table");
+                    }
+                },
+                table.back());
+            ctx.f    = ctx.i + 1;
+            ctx.mode = converter_mode::kDefault;
+            break;
+        case ',':
+            ctx.n    = 0;
+            ctx.f    = ctx.i + 1;
+            ctx.mode = converter_mode::kOccurrencesSpecMax;
+            break;
+        default:
+            throw std::invalid_argument(
+                std::string{"unexpected '"} + c +
+                "' inside opened occurrences specifier {} expression");
+            break;
+    }
+    ++ctx.i;
+
+    return true;
+};
+
+constexpr auto converter_occur_spec_max = [](std::string_view p,
+                                             converter_ctx<std::string_view::const_iterator>& ctx,
+                                             matcher_table_t& table) {
+    if (ctx.i >= ctx.l)
+        throw std::invalid_argument("not terminated occurrences specifier {} expression");
+
+    switch (auto const c = *ctx.i; c) {
+        case '0' ... '9':
+            ctx.n = ctx.n * 10 + c - '0';
+            break;
+        case '}':
+            ctx.n = ctx.n ?: std::numeric_limits<decltype(ctx.n)>::max();
+            std::visit(
+                [&](auto& m) {
+                    if constexpr (std::is_base_of_v<min_max_rule, std::decay_t<decltype(m)>>) {
+                        m.m = ctx.m;
+                        m.n = ctx.n;
+                    } else {
+                        throw std::invalid_argument("invalid type of matcher on the top of table");
+                    }
+                },
+                table.back());
+            ctx.f    = ctx.i + 1;
+            ctx.mode = converter_mode::kDefault;
+            break;
+        default:
+            throw std::invalid_argument(
+                std::string{"unexpected '"} + c +
+                "' inside opened occurrences specifier {} expression");
+            break;
+    }
+    ++ctx.i;
+
+    return true;
+};
+
 std::array<converter_handler_t, converter_mode::kQty> const handlers = {
     converter_default,
     converter_oneof,
+    converter_occur_spec_min,
+    converter_occur_spec_max,
 };
 
 matcher_table_t convert_to_table(std::string_view p)
@@ -218,7 +335,7 @@ bool does_match(
     matcher_table_t::const_iterator tb_first,
     matcher_table_t::const_iterator tb_last);
 
-auto constexpr does_match_with_matcher_strict =
+auto constexpr does_match_with_matcher_range_strict =
     [](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
         auto const cmp = [](auto sc, auto pc) { return '.' == pc || sc == pc; };
         return std::equal(
@@ -231,61 +348,39 @@ auto constexpr does_match_with_matcher_strict =
                does_match(s_first + m.cs.size(), s_last, tb_first + 1, tb_last);
     };
 
-auto constexpr does_match_with_matcher_strict_spec_one_char =
-    [](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
-        return m.c == *s_first && does_match(s_first + 1, s_last, tb_first + 1, tb_last);
-    };
-
-auto constexpr does_match_with_matcher_strict_any_one_char =
-    [](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
-        return does_match(s_first + 1, s_last, tb_first + 1, tb_last);
-    };
-
-auto constexpr does_match_with_matcher_one_of_char =
-    [](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
-        auto const any_of = [&](auto c) {
-            return std::any_of(m.cs.cbegin(), m.cs.cend(), [c](auto pc) { return c == pc; });
-        };
-
+auto constexpr range_matcher_gen(auto predicate)
+{
+    return [=](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
         uint32_t k = 0;
-        for (; k < m.m && s_first < s_last && any_of(*s_first); ++k, ++s_first)
+        for (; k < m.m && s_first < s_last && predicate(m, s_first, s_last); ++k, ++s_first)
             ;
 
         if (k == m.m) {
             if (does_match(s_first, s_last, tb_first + 1, tb_last))
                 return true;
 
-            for (; k < m.n && s_first < s_last && any_of(*s_first) &&
+            for (; k < m.n && s_first < s_last && predicate(m, s_first, s_last) &&
                    !does_match(s_first + 1, s_last, tb_first + 1, tb_last);
                  ++k, ++s_first)
                 ;
 
-            return s_first < s_last && any_of(*s_first);
+            return k < m.n && s_first < s_last && predicate(m, s_first, s_last);
         }
 
         return false;
     };
+};
 
-auto constexpr does_match_with_matcher_zero_more_spec_char =
-    [](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
-        if (does_match(s_first, s_last, tb_first + 1, tb_last))
-            return true;
-        for (; s_first < s_last && m.c == *s_first &&
-               !does_match(s_first + 1, s_last, tb_first + 1, tb_last);
-             ++s_first)
-            ;
-        return s_first < s_last && m.c == *s_first;
-    };
+auto constexpr does_match_with_matcher_spec_char =
+    range_matcher_gen([](auto const& m, auto s_first, auto s_last) { return m.c == *s_first; });
 
-auto constexpr does_match_with_matcher_zero_more_any_char =
-    [](auto const& m, auto s_first, auto s_last, auto tb_first, auto tb_last) {
-        if (does_match(s_first, s_last, tb_first + 1, tb_last))
-            return true;
-        for (; s_first < s_last && !does_match(s_first + 1, s_last, tb_first + 1, tb_last);
-             ++s_first)
-            ;
-        return s_first < s_last;
-    };
+auto constexpr does_match_with_matcher_any_char =
+    range_matcher_gen([](auto const& m, auto s_first, auto s_last) { return true; });
+
+auto constexpr does_match_with_matcher_range_one_of_char =
+    range_matcher_gen([](auto const& m, auto s_first, auto s_last) {
+        return std::any_of(m.cs.cbegin(), m.cs.cend(), [c = *s_first](auto pc) { return c == pc; });
+    });
 
 bool does_match(
     std::string_view::const_iterator s_first,
@@ -296,8 +391,8 @@ bool does_match(
     return (s_first < s_last && tb_first < tb_last &&
             std::visit(
                 [&](auto const& m) {
-                    if constexpr (std::is_same_v<std::decay_t<decltype(m)>, matcher_strict>) {
-                        return does_match_with_matcher_strict(
+                    if constexpr (std::is_same_v<std::decay_t<decltype(m)>, matcher_range_strict>) {
+                        return does_match_with_matcher_range_strict(
                             m,
                             s_first,
                             s_last,
@@ -305,8 +400,8 @@ bool does_match(
                             tb_last);
                     } else if constexpr (std::is_same_v<
                                              std::decay_t<decltype(m)>,
-                                             matcher_strict_spec_one_char>) {
-                        return does_match_with_matcher_strict_spec_one_char(
+                                             matcher_spec_char>) {
+                        return does_match_with_matcher_spec_char(
                             m,
                             s_first,
                             s_last,
@@ -314,8 +409,8 @@ bool does_match(
                             tb_last);
                     } else if constexpr (std::is_same_v<
                                              std::decay_t<decltype(m)>,
-                                             matcher_strict_any_one_char>) {
-                        return does_match_with_matcher_strict_any_one_char(
+                                             matcher_any_char>) {
+                        return does_match_with_matcher_any_char(
                             m,
                             s_first,
                             s_last,
@@ -323,26 +418,8 @@ bool does_match(
                             tb_last);
                     } else if constexpr (std::is_same_v<
                                              std::decay_t<decltype(m)>,
-                                             matcher_one_of_char>) {
-                        return does_match_with_matcher_one_of_char(
-                            m,
-                            s_first,
-                            s_last,
-                            tb_first,
-                            tb_last);
-                    } else if constexpr (std::is_same_v<
-                                             std::decay_t<decltype(m)>,
-                                             matcher_zero_more_spec_char>) {
-                        return does_match_with_matcher_zero_more_spec_char(
-                            m,
-                            s_first,
-                            s_last,
-                            tb_first,
-                            tb_last);
-                    } else if constexpr (std::is_same_v<
-                                             std::decay_t<decltype(m)>,
-                                             matcher_zero_more_any_char>) {
-                        return does_match_with_matcher_zero_more_any_char(
+                                             matcher_range_one_of_char>) {
+                        return does_match_with_matcher_range_one_of_char(
                             m,
                             s_first,
                             s_last,

@@ -35,7 +35,20 @@ INSTANTIATE_TEST_SUITE_P(
         TestParam{ .input = "1122334455", .pattern = "1+22*33.+.*"                },
         TestParam{ .input = "1122334455", .pattern = "[123][123].*[12].+[43].+"   },
         TestParam{ .input = "1122334455", .pattern = "[123]*[123]+.*[12].+[43].+" },
-        TestParam{ .input = "yxxz",       .pattern = "[yxxz]*"                    }
+        TestParam{ .input = "yxxz",       .pattern = "[yxxz]*"                    },
+        TestParam{ .input = "yy",         .pattern = "y{2}"                       },
+        TestParam{ .input = "yyy",        .pattern = "y{3,}"                      },
+        TestParam{ .input = "yyyyy",      .pattern = "y{3,}"                      },
+        TestParam{ .input = "yyy",        .pattern = "y{,5}"                      },
+        TestParam{ .input = "yyyyy",      .pattern = "y{,5}"                      },
+        TestParam{ .input = "yyyy",       .pattern = "y{4,5}"                     },
+        TestParam{ .input = "ab",         .pattern = "[abc]{2}"                   },
+        TestParam{ .input = "cab",        .pattern = "[abc]{3,}"                  },
+        TestParam{ .input = "cacb",       .pattern = "[abc]{3,}"                  },
+        TestParam{ .input = "bac",        .pattern = "[abc]{,5}"                  },
+        TestParam{ .input = "babca",      .pattern = "[abc]{,5}"                  },
+        TestParam{ .input = "abbc",       .pattern = "[abc]{4,5}"                 },
+        TestParam{ .input = "abcbc",      .pattern = "[abc]{4,5}"                 }
     )
 );
 /* clang-format on */
@@ -53,15 +66,30 @@ INSTANTIATE_TEST_SUITE_P(
     TestSuite2Instantiation,
     TestSuite2,
     testing::Values(
-        TestParam{ .input = "aa",   .pattern = "a"             },
-        TestParam{ .input = "aa",   .pattern = "b*a"           },
-        TestParam{ .input = "aa",   .pattern = ".*ac"          },
-        TestParam{ .input = "ab",   .pattern = ".c"            },
-        TestParam{ .input = "abc",  .pattern = "..a"           },
-        TestParam{ .input = "yxz",  .pattern = ".+.+.+.+"      },
-        TestParam{ .input = "yxz",  .pattern = "y+x+z.+"       },
-        TestParam{ .input = "yxxz", .pattern = ".*[ay]x+[az]." },
-        TestParam{ .input = "yxxz", .pattern = "[yxxz]+yxxz"   }
+        TestParam{ .input = "aa",      .pattern = "a"             },
+        TestParam{ .input = "aa",      .pattern = "b*a"           },
+        TestParam{ .input = "aa",      .pattern = ".*ac"          },
+        TestParam{ .input = "ab",      .pattern = ".c"            },
+        TestParam{ .input = "abc",     .pattern = "..a"           },
+        TestParam{ .input = "yxz",     .pattern = ".+.+.+.+"      },
+        TestParam{ .input = "yxz",     .pattern = "y+x+z.+"       },
+        TestParam{ .input = "yxxz",    .pattern = ".*[ay]x+[az]." },
+        TestParam{ .input = "yxxz",    .pattern = "[yxxz]+yxxz"   },
+        TestParam{ .input = "y",       .pattern = "y{2}"          },
+        TestParam{ .input = "yyy",     .pattern = "y{2}"          },
+        TestParam{ .input = "y",       .pattern = "y{3,}"         },
+        TestParam{ .input = "yy",      .pattern = "y{3,}"         },
+        TestParam{ .input = "yyyyyy",  .pattern = "y{,5}"         },
+        TestParam{ .input = "yyyyyyy", .pattern = "y{,5}"         },
+        TestParam{ .input = "yyy",     .pattern = "y{4,5}"        },
+        TestParam{ .input = "yyyyyy",  .pattern = "y{4,5}"        },
+        TestParam{ .input = "abc",     .pattern = "[abc]{2}"      },
+        TestParam{ .input = "ca",      .pattern = "[abc]{3,}"     },
+        TestParam{ .input = "a",       .pattern = "[abc]{3,}"     },
+        TestParam{ .input = "bacbac",  .pattern = "[abc]{,5}"     },
+        TestParam{ .input = "babcacc", .pattern = "[abc]{,5}"     },
+        TestParam{ .input = "abc",     .pattern = "[abc]{4,5}"    },
+        TestParam{ .input = "abcbcc",  .pattern = "[abc]{4,5}"    }
     )
 );
 /* clang-format on */
@@ -95,7 +123,19 @@ INSTANTIATE_TEST_SUITE_P(
         "[a*]",
         "[b+]",
         "[c[",
-        "[c[d]]"
+        "[c[d]]",
+        "c{",
+        "c}",
+        "c{{",
+        "c{4,{",
+        "c{4,6{",
+        "c{4,6}}",
+        "[cab]{",
+        "[cab]}",
+        "[cab]{{",
+        "[cab]{4,{",
+        "[cab]{4,6{",
+        "[cab]{4,6}}"
     )
 );
 /* clang-format on */
