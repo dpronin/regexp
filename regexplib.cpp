@@ -93,8 +93,11 @@ using converter_handler_t =
 constexpr auto converter_default = [](std::string_view p,
                                       converter_ctx& ctx,
                                       matcher_table_t& table) {
-    if (ctx.i >= ctx.l)
+    if (ctx.i >= ctx.l) {
+        if (ctx.f < ctx.i)
+            table.push_back(matcher_strict{{{p.cbegin() + ctx.f, p.cbegin() + ctx.i}}});
         return false;
+    }
 
     switch (auto const c = p[ctx.i]; c) {
         case '[':
@@ -142,7 +145,7 @@ constexpr auto converter_default = [](std::string_view p,
 constexpr auto converter_oneof =
     [](std::string_view p, converter_ctx& ctx, matcher_table_t& table) {
         if (ctx.i >= ctx.l)
-            return false;
+            throw std::invalid_argument("not terminated oneof [] expression");
 
         switch (auto const c = p[ctx.i]; c) {
             case ']': {
@@ -200,12 +203,6 @@ matcher_table_t convert_to_table(std::string_view p)
 
     while (handlers[ctx.mode](p, ctx, table))
         ;
-
-    if (converter_mode::kOneOf == ctx.mode)
-        throw std::invalid_argument("not terminated [] expression");
-
-    if (ctx.f < ctx.i)
-        table.push_back(matcher_strict{{{p.cbegin() + ctx.f, p.cbegin() + ctx.i}}});
 
     return table;
 }
