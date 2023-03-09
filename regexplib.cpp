@@ -6,6 +6,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -15,11 +16,12 @@
 namespace
 {
 
+template <typename Range>
 struct matcher_range {
-    std::vector<char> cs;
+    Range cs;
 };
 
-struct matcher_strict : matcher_range {
+struct matcher_strict : matcher_range<std::string_view> {
 };
 
 struct matcher_strict_spec_one_char {
@@ -36,7 +38,7 @@ struct matcher_zero_more_spec_char {
 struct matcher_zero_more_any_char {
 };
 
-struct matcher_one_of_char : matcher_range {
+struct matcher_one_of_char : matcher_range<std::vector<char>> {
     uint32_t m, n;
 };
 
