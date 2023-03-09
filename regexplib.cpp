@@ -199,18 +199,16 @@ constexpr auto converter_oneof = [](std::string_view p,
     return true;
 };
 
+std::array<converter_handler_t, converter_mode::kQty> const handlers = {
+    converter_default,
+    converter_oneof,
+};
+
 matcher_table_t convert_to_table(std::string_view p)
 {
     matcher_table_t table;
-
-    std::array<converter_handler_t, converter_mode::kQty> const handlers = {
-        converter_default,
-        converter_oneof,
-    };
-
     for (converter_ctx ctx{p.cbegin(), p.cend()}; handlers[ctx.mode](p, ctx, table);)
         ;
-
     return table;
 }
 
