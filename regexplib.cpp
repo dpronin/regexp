@@ -35,7 +35,10 @@ struct matcher_spec_char : min_max_rule {
 struct matcher_any_char : min_max_rule {
 };
 
-struct matcher_range_one_of_char : matcher_range<std::vector<char>>, min_max_rule {
+struct matcher_range_one_of_char_positive : matcher_range<std::vector<char>>, min_max_rule {
+};
+
+struct matcher_range_one_of_char_negative : matcher_range<std::vector<char>>, min_max_rule {
 };
 
 /* clang-format off */
@@ -43,7 +46,8 @@ using matcher_t = std::variant<
   matcher_range_strict,
   matcher_spec_char,
   matcher_any_char,
-  matcher_range_one_of_char
+  matcher_range_one_of_char_positive,
+  matcher_range_one_of_char_negative
 >;
 /* clang-format on */
 
@@ -192,13 +196,20 @@ constexpr auto converter_oneof = [](std::string_view p,
 
     switch (auto const c = *ctx.i; c) {
         case ']': {
+            bool const negate = '^' == *ctx.f;
+            if (negate)
+                ++ctx.f;
+
             if (ctx.f == ctx.i)
                 throw std::invalid_argument("empty oneof [] expression is impossible");
+
             std::vector<char> cs{ctx.f, ctx.i};
             std::sort(cs.begin(), cs.end());
             cs.erase(std::unique(cs.begin(), cs.end()), cs.end());
-            matcher_range_one_of_char m{{std::move(cs)}, 1, 1};
+
             ctx.mode = converter_mode::kDefault;
+
+            uint32_t m = 1, n = 1;
             if (ctx.i + 1 < ctx.l) {
                 switch (auto const nc = ctx.i[1]; nc) {
                     case '{':
@@ -208,19 +219,26 @@ constexpr auto converter_oneof = [](std::string_view p,
                         ctx.mode = converter_mode::kOccurrencesSpecMin;
                         break;
                     case '*':
-                        m.m = 0;
+                        m = 0;
                         [[fallthrough]];
                     case '+':
-                        m.n = std::numeric_limits<decltype(m.n)>::max();
+                        n = std::numeric_limits<decltype(n)>::max();
                         ++ctx.i;
                         [[fallthrough]];
                     default:
                         break;
                 }
             }
-            table.push_back(std::move(m));
+
+            table.push_back(
+                negate ? matcher_t{matcher_range_one_of_char_negative({{std::move(cs)}, m, n})}
+                       : matcher_t{matcher_range_one_of_char_positive({{std::move(cs)}, m, n})});
             ctx.f = ctx.i + 1;
         } break;
+        case '^':
+            if (ctx.f == ctx.i)
+                break;
+            [[fallthrough]];
         case '[':
         case '*':
         case '+':
@@ -377,9 +395,16 @@ auto constexpr does_match_with_matcher_spec_char =
 auto constexpr does_match_with_matcher_any_char =
     range_matcher_gen([](auto const& m, auto s_first, auto s_last) { return true; });
 
-auto constexpr does_match_with_matcher_range_one_of_char =
+auto constexpr does_match_with_matcher_range_one_of_char_positive =
     range_matcher_gen([](auto const& m, auto s_first, auto s_last) {
         return std::any_of(m.cs.cbegin(), m.cs.cend(), [c = *s_first](auto pc) { return c == pc; });
+    });
+
+auto constexpr does_match_with_matcher_range_one_of_char_negative =
+    range_matcher_gen([](auto const& m, auto s_first, auto s_last) {
+        return std::none_of(m.cs.cbegin(), m.cs.cend(), [c = *s_first](auto pc) {
+            return c == pc;
+        });
     });
 
 bool does_match(
@@ -418,8 +443,17 @@ bool does_match(
                             tb_last);
                     } else if constexpr (std::is_same_v<
                                              std::decay_t<decltype(m)>,
-                                             matcher_range_one_of_char>) {
-                        return does_match_with_matcher_range_one_of_char(
+                                             matcher_range_one_of_char_positive>) {
+                        return does_match_with_matcher_range_one_of_char_positive(
+                            m,
+                            s_first,
+                            s_last,
+                            tb_first,
+                            tb_last);
+                    } else if constexpr (std::is_same_v<
+                                             std::decay_t<decltype(m)>,
+                                             matcher_range_one_of_char_negative>) {
+                        return does_match_with_matcher_range_one_of_char_negative(
                             m,
                             s_first,
                             s_last,

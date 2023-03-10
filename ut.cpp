@@ -48,7 +48,8 @@ INSTANTIATE_TEST_SUITE_P(
         TestParam{ .input = "bac",        .pattern = "[abc]{,5}"                  },
         TestParam{ .input = "babca",      .pattern = "[abc]{,5}"                  },
         TestParam{ .input = "abbc",       .pattern = "[abc]{4,5}"                 },
-        TestParam{ .input = "abcbc",      .pattern = "[abc]{4,5}"                 }
+        TestParam{ .input = "abcbc",      .pattern = "[abc]{4,5}"                 },
+        TestParam{ .input = "defgh",      .pattern = "[^abc]{4,5}"                }
     )
 );
 /* clang-format on */
@@ -89,7 +90,8 @@ INSTANTIATE_TEST_SUITE_P(
         TestParam{ .input = "bacbac",  .pattern = "[abc]{,5}"     },
         TestParam{ .input = "babcacc", .pattern = "[abc]{,5}"     },
         TestParam{ .input = "abc",     .pattern = "[abc]{4,5}"    },
-        TestParam{ .input = "abcbcc",  .pattern = "[abc]{4,5}"    }
+        TestParam{ .input = "abcbcc",  .pattern = "[abc]{4,5}"    },
+        TestParam{ .input = "defbh",   .pattern = "[^abc]{4,5}"   }
     )
 );
 /* clang-format on */
@@ -135,7 +137,11 @@ INSTANTIATE_TEST_SUITE_P(
         "[cab]{{",
         "[cab]{4,{",
         "[cab]{4,6{",
-        "[cab]{4,6}}"
+        "[cab]{4,6}}",
+        "[c^ab]{4,6}",
+        "[cab^]{4,6}",
+        "[^^cab]{4,6}",
+        "[^]{4,6}"
     )
 );
 /* clang-format on */
