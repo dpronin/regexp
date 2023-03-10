@@ -1,12 +1,11 @@
-# The binary and library support
-
-- Any ASCII symbols strictly matched except special key symbols
-- Key symbol '.' that matches any one symbol except special key symbol
-- So-called 'one-of' expression embraced in \[\] like '\[Abz123\]'. Ranges like \[A-Z0-9\] are not supported yet
-- Key symbols like '\*', '+' for specifying number of possible occurrences of a preceding regular symbol or expression
-- Key occurrences specifiers like '{}' for specifying a certain number of possible occurrences of a preceding regular symbol or expression
-  These symbols could be applied to a preceding regular symbol as well as to '.' or 'one-of' expression
-- The parser check the input pattern for correctness
-- The parser optimizes input pattern to make fewer steps and possible branches to match input strings
-
-See unit tests to get familiar with what binary and library could do
+| Characters | Description                                                                                                                                                                   |
+|------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| \[xyz\]    | A character class. Matches any one of the enclosed characters.                                                                                                                |
+| [^xyz]     | A negated or complemented character class. That is, it matches<br>          anything that is not enclosed in the brackets                                                     |
+| .          | 1) Matches any single character.<br>2) Inside a character class, the dot loses its special meaning and matches a literal dot.                                                 |
+| x*         | Matches the preceding item "x" 0 or more times. |
+| x+         | Matches the preceding item "x" 1 or more times. Equivalent to {1,}.                                                                                                           |
+| x?         | Matches the preceding item "x" 0 or 1 times                                                                                                                                   |
+| x{n}       | Where "n" is a positive integer, matches exactly "n" occurrences of the preceding item "x"                                                                                    |
+| x{n,}      | Where "n" is a positive integer, matches at least "n" occurrences of the preceding item "x"                                                                                   |
+| x{n,m}     | Where "n" is 0 or a positive integer, "m" is a positive integer, and m > n, matches at least "n" and at most "m" occurrences of the preceding item "x".                       |
