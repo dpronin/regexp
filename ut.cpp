@@ -49,7 +49,10 @@ INSTANTIATE_TEST_SUITE_P(
         TestParam{ .input = "babca",      .pattern = "[abc]{,5}"                  },
         TestParam{ .input = "abbc",       .pattern = "[abc]{4,5}"                 },
         TestParam{ .input = "abcbc",      .pattern = "[abc]{4,5}"                 },
-        TestParam{ .input = "defgh",      .pattern = "[^abc]{4,5}"                }
+        TestParam{ .input = "defgh",      .pattern = "[^abc]{4,5}"                },
+        TestParam{ .input = "a*",         .pattern = "[a*]{,2}"                   },
+        TestParam{ .input = "+b",         .pattern = "[b+]{,2}"                   },
+        TestParam{ .input = "?c??c",      .pattern = "[?c]+"                      }
     )
 );
 /* clang-format on */
@@ -122,8 +125,6 @@ INSTANTIATE_TEST_SUITE_P(
         "[abc]++",
         "[abc]*+",
         "[abc]+*",
-        "[a*]",
-        "[b+]",
         "[c[",
         "[c[d]]",
         "c{",

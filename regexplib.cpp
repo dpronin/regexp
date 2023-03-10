@@ -240,8 +240,6 @@ constexpr auto converter_oneof = [](std::string_view p,
                 break;
             [[fallthrough]];
         case '[':
-        case '*':
-        case '+':
             throw std::invalid_argument(
                 std::string{"unexpected '"} + c + "' inside opened oneof [] expression");
         default:
