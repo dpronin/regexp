@@ -52,7 +52,12 @@ INSTANTIATE_TEST_SUITE_P(
         TestParam{ .input = "defgh",      .pattern = "[^abc]{4,5}"                },
         TestParam{ .input = "a*",         .pattern = "[a*]{,2}"                   },
         TestParam{ .input = "+b",         .pattern = "[b+]{,2}"                   },
-        TestParam{ .input = "?c??c",      .pattern = "[?c]+"                      }
+        TestParam{ .input = "?c??c",      .pattern = "[?c]+"                      },
+        TestParam{ .input = "a?",         .pattern = "a[?c]?"                     },
+        TestParam{ .input = "ac",         .pattern = "a[?c]?"                     },
+        TestParam{ .input = "a",          .pattern = "a[?c]?"                     },
+        TestParam{ .input = "a",          .pattern = "ac?"                        },
+        TestParam{ .input = "ac",         .pattern = "ac?"                        }
     )
 );
 /* clang-format on */
@@ -94,7 +99,10 @@ INSTANTIATE_TEST_SUITE_P(
         TestParam{ .input = "babcacc", .pattern = "[abc]{,5}"     },
         TestParam{ .input = "abc",     .pattern = "[abc]{4,5}"    },
         TestParam{ .input = "abcbcc",  .pattern = "[abc]{4,5}"    },
-        TestParam{ .input = "defbh",   .pattern = "[^abc]{4,5}"   }
+        TestParam{ .input = "defbh",   .pattern = "[^abc]{4,5}"   },
+        TestParam{ .input = "ab",      .pattern = "a[?c]?"        },
+        TestParam{ .input = "ab",      .pattern = "ac?"           },
+        TestParam{ .input = "acc",     .pattern = "ac?"           }
     )
 );
 /* clang-format on */

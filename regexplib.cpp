@@ -126,6 +126,7 @@ constexpr auto converter_default = [](std::string_view p,
             break;
         case '*':
         case '+':
+        case '?':
         case '{':
             if (ctx.f == ctx.i)
                 throw std::invalid_argument(
@@ -137,12 +138,13 @@ constexpr auto converter_default = [](std::string_view p,
             switch (c) {
                 case '*':
                 case '+':
+                case '?':
                     switch (auto const pc = ctx.i[-1]; pc) {
                         case '.':
                             while (!table.empty() && does_allow_zero_occurrences(table.back()))
                                 table.pop_back();
-                            table.push_back(
-                                matcher_any_char{{0, std::numeric_limits<uint32_t>::max()}});
+                            table.push_back(matcher_any_char{
+                                {0, '?' == c ? 1 : std::numeric_limits<uint32_t>::max()}});
                             if ('+' == c)
                                 table.push_back(matcher_any_char{{1, 1}});
                             break;
@@ -151,7 +153,7 @@ constexpr auto converter_default = [](std::string_view p,
                                 !is_zero_more_any_char_matcher(table.back()) &&
                                     !is_zero_more_spec_char_matcher_with(table.back(), pc))
                                 table.push_back(matcher_spec_char{
-                                    {0, std::numeric_limits<uint32_t>::max()},
+                                    {0, '?' == c ? 1 : std::numeric_limits<uint32_t>::max()},
                                     pc});
                             if ('+' == c)
                                 table.push_back(matcher_spec_char{{1, 1}, pc});
@@ -219,12 +221,17 @@ constexpr auto converter_oneof = [](std::string_view p,
                         ctx.mode = converter_mode::kOccurrencesSpecMin;
                         break;
                     case '*':
-                        m = 0;
-                        [[fallthrough]];
-                    case '+':
-                        n = std::numeric_limits<decltype(n)>::max();
+                        m = 0, n = std::numeric_limits<decltype(n)>::max();
                         ++ctx.i;
-                        [[fallthrough]];
+                        break;
+                    case '+':
+                        m = 1, n = std::numeric_limits<decltype(n)>::max();
+                        ++ctx.i;
+                        break;
+                    case '?':
+                        m = 0, n = 1;
+                        ++ctx.i;
+                        break;
                     default:
                         break;
                 }
