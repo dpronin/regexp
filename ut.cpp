@@ -150,7 +150,9 @@ INSTANTIATE_TEST_SUITE_P(
         "[c^ab]{4,6}",
         "[cab^]{4,6}",
         "[^^cab]{4,6}",
-        "[^]{4,6}"
+        "[^]{4,6}",
+        "f{6,4}",
+        "[abc]{6,4}"
     )
 );
 /* clang-format on */

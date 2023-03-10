@@ -313,6 +313,9 @@ constexpr auto converter_occur_spec_max = [](std::string_view p,
             break;
         case '}':
             ctx.n = ctx.n ?: std::numeric_limits<decltype(ctx.n)>::max();
+            if (ctx.m > ctx.n)
+                throw std::invalid_argument(
+                    "range specified in occurrences specifier {} expression is invalid");
             std::visit(
                 [&](auto& m) {
                     if constexpr (std::is_base_of_v<min_max_rule, std::decay_t<decltype(m)>>) {
