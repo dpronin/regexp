@@ -119,10 +119,73 @@ constexpr auto converter_default = [](std::string_view p,
 
     switch (auto const c = *ctx.i; c) {
         case '[':
+        case '\\':
             if (ctx.f < ctx.i)
                 table.push_back(matcher_range_strict{{{ctx.f, ctx.i}}});
-            ctx.f    = ctx.i + 1;
-            ctx.mode = converter_mode::kOneOf;
+            switch (c) {
+                case '[':
+                    ctx.f    = ctx.i + 1;
+                    ctx.mode = converter_mode::kOneOf;
+                    break;
+                default /* '\\'*/: {
+                    if (++ctx.i >= ctx.l)
+                        throw std::invalid_argument("not terminated '\\' value");
+                    std::vector<char> cs;
+                    bool negate = false;
+                    switch (auto const nc = *ctx.i; nc) {
+                        case 'd':
+                        case 'D':
+                            cs     = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+                            negate = 'D' == nc;
+                            break;
+                        case 'w':
+                        case 'W':
+                            cs = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+                                  'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+                                  'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+                                  'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+                                  '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '_'};
+                            negate = 'W' == nc;
+                            break;
+                        case 's':
+                        case 'S':
+                            cs     = {' ', '\f', '\n', '\t', '\v'};
+                            negate = 'S' == nc;
+                            break;
+                        case 't':
+                            cs = {'\t'};
+                            break;
+                        case 'r':
+                            cs = {'\r'};
+                            break;
+                        case 'n':
+                            cs = {'\n'};
+                            break;
+                        case 'v':
+                            cs = {'\v'};
+                            break;
+                        case 'f':
+                            cs = {'\f'};
+                            break;
+                        case '0':
+                            cs = {'\0'};
+                            break;
+                        case '\\':
+                            cs = {'\\'};
+                            break;
+                        default:
+                            throw std::invalid_argument(
+                                std::string{"invalid a special control symbol '"} + nc +
+                                "' after \\");
+                    }
+                    table.push_back(
+                        negate
+                            ? matcher_t{matcher_range_one_of_char_negative({{std::move(cs)}, 1, 1})}
+                            : matcher_t{
+                                  matcher_range_one_of_char_positive({{std::move(cs)}, 1, 1})});
+                    ctx.f = ctx.i + 1;
+                } break;
+            }
             break;
         case '*':
         case '+':

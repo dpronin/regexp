@@ -57,7 +57,23 @@ INSTANTIATE_TEST_SUITE_P(
         TestParam{ .input = "ac",         .pattern = "a[?c]?"                     },
         TestParam{ .input = "a",          .pattern = "a[?c]?"                     },
         TestParam{ .input = "a",          .pattern = "ac?"                        },
-        TestParam{ .input = "ac",         .pattern = "ac?"                        }
+        TestParam{ .input = "0",          .pattern = "\\d"                        },
+        TestParam{ .input = "a",          .pattern = "\\D"                        },
+        TestParam{ .input = " ",          .pattern = "\\D"                        },
+        TestParam{ .input = "b",          .pattern = "\\w"                        },
+        TestParam{ .input = "%",          .pattern = "\\W"                        },
+        TestParam{ .input = " ",          .pattern = "\\W"                        },
+        TestParam{ .input = " ",          .pattern = "\\s"                        },
+        TestParam{ .input = "\t",         .pattern = "\\s"                        },
+        TestParam{ .input = "a",          .pattern = "\\S"                        },
+        TestParam{ .input = "1",          .pattern = "\\S"                        },
+        TestParam{ .input = "\t",         .pattern = "\\t"                        },
+        TestParam{ .input = "\r",         .pattern = "\\r"                        },
+        TestParam{ .input = "\n",         .pattern = "\\n"                        },
+        TestParam{ .input = "\v",         .pattern = "\\v"                        },
+        TestParam{ .input = "\f",         .pattern = "\\f"                        },
+        // TestParam{ .input = "\0",         .pattern = "\\0"                        },
+        TestParam{ .input = "\\",         .pattern = "\\\\"                       }
     )
 );
 /* clang-format on */
