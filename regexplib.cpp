@@ -56,6 +56,7 @@ using matcher_table_t = std::vector<matcher_t>;
 enum converter_mode {
     kDefault,
     kOneOf,
+    kOneOfSpecSym,
     kOccurrencesSpecMin,
     kOccurrencesSpecMax,
     kQty,
@@ -122,70 +123,8 @@ constexpr auto converter_default = [](std::string_view p,
         case '\\':
             if (ctx.f < ctx.i)
                 table.push_back(matcher_range_strict{{{ctx.f, ctx.i}}});
-            switch (c) {
-                case '[':
-                    ctx.f    = ctx.i + 1;
-                    ctx.mode = converter_mode::kOneOf;
-                    break;
-                default /* '\\'*/: {
-                    if (++ctx.i >= ctx.l)
-                        throw std::invalid_argument("not terminated '\\' value");
-                    std::vector<char> cs;
-                    bool negate = false;
-                    switch (auto const nc = *ctx.i; nc) {
-                        case 'd':
-                        case 'D':
-                            cs     = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
-                            negate = 'D' == nc;
-                            break;
-                        case 'w':
-                        case 'W':
-                            cs = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-                                  'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-                                  'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
-                                  'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-                                  '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '_'};
-                            negate = 'W' == nc;
-                            break;
-                        case 's':
-                        case 'S':
-                            cs     = {' ', '\f', '\n', '\t', '\v'};
-                            negate = 'S' == nc;
-                            break;
-                        case 't':
-                            cs = {'\t'};
-                            break;
-                        case 'r':
-                            cs = {'\r'};
-                            break;
-                        case 'n':
-                            cs = {'\n'};
-                            break;
-                        case 'v':
-                            cs = {'\v'};
-                            break;
-                        case 'f':
-                            cs = {'\f'};
-                            break;
-                        case '0':
-                            cs = {'\0'};
-                            break;
-                        case '\\':
-                            cs = {'\\'};
-                            break;
-                        default:
-                            throw std::invalid_argument(
-                                std::string{"invalid a special control symbol '"} + nc +
-                                "' after \\");
-                    }
-                    table.push_back(
-                        negate
-                            ? matcher_t{matcher_range_one_of_char_negative({{std::move(cs)}, 1, 1})}
-                            : matcher_t{
-                                  matcher_range_one_of_char_positive({{std::move(cs)}, 1, 1})});
-                    ctx.f = ctx.i + 1;
-                } break;
-            }
+            ctx.f    = ctx.i + 1;
+            ctx.mode = '[' == c ? converter_mode::kOneOf : converter_mode::kOneOfSpecSym;
             break;
         case '*':
         case '+':
@@ -320,6 +259,97 @@ constexpr auto converter_oneof = [](std::string_view p,
     return true;
 };
 
+constexpr auto converter_oneof_specsym = [](std::string_view p,
+                                            converter_ctx<std::string_view::const_iterator>& ctx,
+                                            matcher_table_t& table) {
+    if (ctx.i >= ctx.l)
+        throw std::invalid_argument("not terminated oneof [] expression");
+
+    std::vector<char> cs;
+    bool negate = false;
+    switch (auto const c = *ctx.i; c) {
+        case 'd':
+        case 'D':
+            cs     = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'};
+            negate = 'D' == c;
+            break;
+        case 'w':
+        case 'W':
+            cs = {'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+                  'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
+                  'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+                  'w', 'x', 'y', 'z', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '_'};
+            negate = 'W' == c;
+            break;
+        case 's':
+        case 'S':
+            cs     = {' ', '\f', '\n', '\t', '\v'};
+            negate = 'S' == c;
+            break;
+        case 't':
+            cs = {'\t'};
+            break;
+        case 'r':
+            cs = {'\r'};
+            break;
+        case 'n':
+            cs = {'\n'};
+            break;
+        case 'v':
+            cs = {'\v'};
+            break;
+        case 'f':
+            cs = {'\f'};
+            break;
+        case '0':
+            cs = {'\0'};
+            break;
+        case '\\':
+            cs = {'\\'};
+            break;
+        default:
+            throw std::invalid_argument(
+                std::string{"invalid a special control symbol '"} + c + "' after \\");
+    }
+
+    ctx.mode = converter_mode::kDefault;
+
+    uint32_t m = 1, n = 1;
+    if (ctx.i + 1 < ctx.l) {
+        switch (auto const nc = ctx.i[1]; nc) {
+            case '{':
+                ctx.m = 0;
+                ctx.n = 0;
+                ++ctx.i;
+                ctx.mode = converter_mode::kOccurrencesSpecMin;
+                break;
+            case '*':
+                m = 0, n = std::numeric_limits<decltype(n)>::max();
+                ++ctx.i;
+                break;
+            case '+':
+                m = 1, n = std::numeric_limits<decltype(n)>::max();
+                ++ctx.i;
+                break;
+            case '?':
+                m = 0, n = 1;
+                ++ctx.i;
+                break;
+            default:
+                break;
+        }
+    }
+
+    table.push_back(
+        negate ? matcher_t{matcher_range_one_of_char_negative({{std::move(cs)}, m, n})}
+               : matcher_t{matcher_range_one_of_char_positive({{std::move(cs)}, m, n})});
+    ctx.f = ctx.i + 1;
+
+    ++ctx.i;
+
+    return true;
+};
+
 constexpr auto converter_occur_spec_min = [](std::string_view p,
                                              converter_ctx<std::string_view::const_iterator>& ctx,
                                              matcher_table_t& table) {
@@ -406,6 +436,7 @@ constexpr auto converter_occur_spec_max = [](std::string_view p,
 std::array<converter_handler_t, converter_mode::kQty> const handlers = {
     converter_default,
     converter_oneof,
+    converter_oneof_specsym,
     converter_occur_spec_min,
     converter_occur_spec_max,
 };
