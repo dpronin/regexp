@@ -544,11 +544,9 @@ bool does_match(
     matcher_table_t::const_iterator tb_first,
     matcher_table_t::const_iterator tb_last)
 {
-    if (s_first < s_last) {
-        return tb_first < tb_last &&
-               std::visit(matcher_visitor_gen(s_first, s_last, tb_first + 1, tb_last), *tb_first);
-    }
-    return std::all_of(tb_first, tb_last, does_allow_zero_occurrences);
+    return s_first < s_last && tb_first < tb_last &&
+               std::visit(matcher_visitor_gen(s_first, s_last, tb_first + 1, tb_last), *tb_first) ||
+           s_first >= s_last && std::all_of(tb_first, tb_last, does_allow_zero_occurrences);
 }
 
 bool does_match(std::string_view s, matcher_table_t const& tb)
