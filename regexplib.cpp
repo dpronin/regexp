@@ -494,6 +494,11 @@ auto constexpr range_matcher_gen(auto predicate)
     };
 };
 
+auto constexpr eq_cmp_gen(char c)
+{
+    return [=](char ch) { return c == ch; };
+};
+
 auto constexpr does_match_with_matcher_spec_char =
     range_matcher_gen([](auto const& m, auto s_first, auto s_last) { return m.c == *s_first; });
 
@@ -502,14 +507,12 @@ auto constexpr does_match_with_matcher_any_char =
 
 auto constexpr does_match_with_matcher_range_one_of_char_positive =
     range_matcher_gen([](auto const& m, auto s_first, auto s_last) {
-        return std::any_of(m.cs.cbegin(), m.cs.cend(), [c = *s_first](auto pc) { return c == pc; });
+        return std::ranges::any_of(m.cs, eq_cmp_gen(*s_first));
     });
 
 auto constexpr does_match_with_matcher_range_one_of_char_negative =
     range_matcher_gen([](auto const& m, auto s_first, auto s_last) {
-        return std::none_of(m.cs.cbegin(), m.cs.cend(), [c = *s_first](auto pc) {
-            return c == pc;
-        });
+        return std::ranges::none_of(m.cs, eq_cmp_gen(*s_first));
     });
 
 bool does_match(
