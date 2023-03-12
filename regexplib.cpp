@@ -468,7 +468,7 @@ auto constexpr does_match_with_matcher_range_strict =
                    m.cs.cbegin(),
                    m.cs.cend(),
                    cmp) &&
-               does_match(s_first + m.cs.size(), s_last, tb_first + 1, tb_last);
+               does_match(s_first + m.cs.size(), s_last, tb_first, tb_last);
     };
 
 auto constexpr range_matcher_gen(auto predicate)
@@ -479,11 +479,11 @@ auto constexpr range_matcher_gen(auto predicate)
             ;
 
         if (k == m.m) {
-            if (does_match(s_first, s_last, tb_first + 1, tb_last))
+            if (does_match(s_first, s_last, tb_first, tb_last))
                 return true;
 
             for (; k < m.n && s_first < s_last && predicate(m, s_first, s_last) &&
-                   !does_match(s_first + 1, s_last, tb_first + 1, tb_last);
+                   !does_match(s_first + 1, s_last, tb_first, tb_last);
                  ++k, ++s_first)
                 ;
 
@@ -546,7 +546,7 @@ bool does_match(
 {
     if (s_first < s_last) {
         return tb_first < tb_last &&
-               std::visit(matcher_visitor_gen(s_first, s_last, tb_first, tb_last), *tb_first);
+               std::visit(matcher_visitor_gen(s_first, s_last, tb_first + 1, tb_last), *tb_first);
     }
     return std::all_of(tb_first, tb_last, does_allow_zero_occurrences);
 }
