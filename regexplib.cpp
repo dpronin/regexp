@@ -521,60 +521,64 @@ bool does_match(
     matcher_table_t::const_iterator tb_first,
     matcher_table_t::const_iterator tb_last)
 {
-    return (s_first < s_last && tb_first < tb_last &&
-            std::visit(
-                [&](auto const& m) {
-                    if constexpr (std::is_same_v<std::decay_t<decltype(m)>, matcher_range_strict>) {
-                        return does_match_with_matcher_range_strict(
-                            m,
-                            s_first,
-                            s_last,
-                            tb_first,
-                            tb_last);
-                    } else if constexpr (std::is_same_v<
-                                             std::decay_t<decltype(m)>,
-                                             matcher_spec_char>) {
-                        return does_match_with_matcher_spec_char(
-                            m,
-                            s_first,
-                            s_last,
-                            tb_first,
-                            tb_last);
-                    } else if constexpr (std::is_same_v<
-                                             std::decay_t<decltype(m)>,
-                                             matcher_any_char>) {
-                        return does_match_with_matcher_any_char(
-                            m,
-                            s_first,
-                            s_last,
-                            tb_first,
-                            tb_last);
-                    } else if constexpr (std::is_same_v<
-                                             std::decay_t<decltype(m)>,
-                                             matcher_range_one_of_char_positive>) {
-                        return does_match_with_matcher_range_one_of_char_positive(
-                            m,
-                            s_first,
-                            s_last,
-                            tb_first,
-                            tb_last);
-                    } else if constexpr (std::is_same_v<
-                                             std::decay_t<decltype(m)>,
-                                             matcher_range_one_of_char_negative>) {
-                        return does_match_with_matcher_range_one_of_char_negative(
-                            m,
-                            s_first,
-                            s_last,
-                            tb_first,
-                            tb_last);
-                    } else {
-                        static_assert(
-                            dependent_false_v<std::decay_t<decltype(m)>>,
-                            "unhandled matcher type");
-                    }
-                },
-                *tb_first)) ||
-           (s_first == s_last && std::all_of(tb_first, tb_last, does_allow_zero_occurrences));
+    if (s_first < s_last) {
+        return tb_first < tb_last &&
+               std::visit(
+                   [=](auto const& m) {
+                       if constexpr (std::is_same_v<
+                                         std::decay_t<decltype(m)>,
+                                         matcher_range_strict>) {
+                           return does_match_with_matcher_range_strict(
+                               m,
+                               s_first,
+                               s_last,
+                               tb_first,
+                               tb_last);
+                       } else if constexpr (std::is_same_v<
+                                                std::decay_t<decltype(m)>,
+                                                matcher_spec_char>) {
+                           return does_match_with_matcher_spec_char(
+                               m,
+                               s_first,
+                               s_last,
+                               tb_first,
+                               tb_last);
+                       } else if constexpr (std::is_same_v<
+                                                std::decay_t<decltype(m)>,
+                                                matcher_any_char>) {
+                           return does_match_with_matcher_any_char(
+                               m,
+                               s_first,
+                               s_last,
+                               tb_first,
+                               tb_last);
+                       } else if constexpr (std::is_same_v<
+                                                std::decay_t<decltype(m)>,
+                                                matcher_range_one_of_char_positive>) {
+                           return does_match_with_matcher_range_one_of_char_positive(
+                               m,
+                               s_first,
+                               s_last,
+                               tb_first,
+                               tb_last);
+                       } else if constexpr (std::is_same_v<
+                                                std::decay_t<decltype(m)>,
+                                                matcher_range_one_of_char_negative>) {
+                           return does_match_with_matcher_range_one_of_char_negative(
+                               m,
+                               s_first,
+                               s_last,
+                               tb_first,
+                               tb_last);
+                       } else {
+                           static_assert(
+                               dependent_false_v<std::decay_t<decltype(m)>>,
+                               "unhandled matcher type");
+                       }
+                   },
+                   *tb_first);
+    }
+    return std::all_of(tb_first, tb_last, does_allow_zero_occurrences);
 }
 
 bool does_match(std::string_view s, matcher_table_t const& tb)
