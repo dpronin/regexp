@@ -35,10 +35,13 @@ struct matcher_spec_char : min_max_rule {
 struct matcher_any_char : min_max_rule {
 };
 
-struct matcher_range_one_of_char_positive : matcher_range<std::vector<char>>, min_max_rule {
+struct matcher_range_one_of_char : matcher_range<std::vector<char>>, min_max_rule {
 };
 
-struct matcher_range_one_of_char_negative : matcher_range<std::vector<char>>, min_max_rule {
+struct matcher_range_one_of_char_positive : matcher_range_one_of_char {
+};
+
+struct matcher_range_one_of_char_negative : matcher_range_one_of_char {
 };
 
 /* clang-format off */
@@ -240,8 +243,8 @@ constexpr auto converter_oneof = [](std::string_view p,
             }
 
             table.push_back(
-                negate ? matcher_t{matcher_range_one_of_char_negative({{std::move(cs)}, m, n})}
-                       : matcher_t{matcher_range_one_of_char_positive({{std::move(cs)}, m, n})});
+                negate ? matcher_t{matcher_range_one_of_char_negative({{{std::move(cs)}, m, n}})}
+                       : matcher_t{matcher_range_one_of_char_positive({{{std::move(cs)}, m, n}})});
             ctx.f = ctx.i + 1;
         } break;
         case '^':
@@ -341,8 +344,8 @@ constexpr auto converter_oneof_specsym = [](std::string_view p,
     }
 
     table.push_back(
-        negate ? matcher_t{matcher_range_one_of_char_negative({{std::move(cs)}, m, n})}
-               : matcher_t{matcher_range_one_of_char_positive({{std::move(cs)}, m, n})});
+        negate ? matcher_t{matcher_range_one_of_char_negative({{{std::move(cs)}, m, n}})}
+               : matcher_t{matcher_range_one_of_char_positive({{{std::move(cs)}, m, n}})});
     ctx.f = ctx.i + 1;
 
     ++ctx.i;
@@ -575,7 +578,6 @@ bool does_match(std::string_view s, matcher_table_t const& tb)
 {
     return does_match(s.cbegin(), s.cend(), tb.cbegin(), tb.cend());
 }
-
 } // namespace
 
 namespace regexp
