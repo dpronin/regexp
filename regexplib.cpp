@@ -45,7 +45,7 @@ struct matcher_range_one_of_char_negative : matcher_range_one_of_char {
 };
 
 /* clang-format off */
-using matcher_t = std::variant<
+using simple_matcher = std::variant<
   matcher_range_strict,
   matcher_spec_char,
   matcher_any_char,
@@ -54,7 +54,14 @@ using matcher_t = std::variant<
 >;
 /* clang-format on */
 
+struct complex_matcher;
+
+using matcher_t       = std::variant<simple_matcher, complex_matcher>;
 using matcher_table_t = std::vector<matcher_t>;
+
+struct complex_matcher : min_max_rule {
+    matcher_table_t ms;
+};
 
 enum converter_mode {
     kDefault,
@@ -86,25 +93,27 @@ struct converter_ctx {
 template <typename... Args>
 constexpr bool dependent_false_v = false;
 
-constexpr auto does_allow_zero_occurrences = [](matcher_t const& matcher) {
+constexpr bool does_allow_zero_occurrences(auto const& m)
+{
     return std::visit(
         [](auto const& m) {
             if constexpr (std::is_base_of_v<min_max_rule, std::decay_t<decltype(m)>>)
                 return 0 == m.m;
+            else if constexpr (std::is_same_v<simple_matcher, std::decay_t<decltype(m)>>)
+                return std::visit(does_allow_zero_occurrences, m);
             else
                 return false;
         },
-        matcher);
+        m);
+}
+
+constexpr auto is_zero_more_spec_char_matcher_with = [](auto const& m, char c) {
+    return std::holds_alternative<matcher_spec_char>(m) && does_allow_zero_occurrences(m) &&
+           std::get<matcher_spec_char>(m).c == c;
 };
 
-constexpr auto is_zero_more_spec_char_matcher_with = [](matcher_t const& matcher, char c) {
-    return std::holds_alternative<matcher_spec_char>(matcher) &&
-           does_allow_zero_occurrences(matcher) && std::get<matcher_spec_char>(matcher).c == c;
-};
-
-constexpr auto is_zero_more_any_char_matcher = [](matcher_t const& matcher) {
-    return std::holds_alternative<matcher_any_char>(matcher) &&
-           does_allow_zero_occurrences(matcher);
+constexpr auto is_zero_more_any_char_matcher = [](auto const& m) {
+    return std::holds_alternative<matcher_any_char>(m) && does_allow_zero_occurrences(m);
 };
 
 using converter_handler_t = std::function<bool(
