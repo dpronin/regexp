@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19 FATAL_ERROR)
-project(regexp VERSION 1.0.0 LANGUAGES CXX)
+project(regexp VERSION 2.0.0 LANGUAGES CXX)
 include(CTest)
 
 if (NOT CMAKE_BUILD_TYPE)
